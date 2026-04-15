@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Document Viewer - {{ data.app_no }}</title>
+<!-- PDF.js library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+<script>
+  // Set worker source for PDF.js
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+</script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 12px; background: #2c2c2c; }
+  .topbar { background: #1a1a2e; color: white; padding: 4px 10px; display: flex; align-items: center; gap: 10px; }
+  .topbar .logo { color: #ff6b35; font-weight: bold; font-size: 14px; }
+  .doc-toolbar { background: #333; border-bottom: 1px solid #555; padding: 4px 8px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .doc-toolbar button { padding: 3px 8px; font-size: 10px; border: 1px solid #666; background: #444; color: #eee; cursor: pointer; border-radius: 2px; }
+  .doc-toolbar button:hover { background: #555; }
+  .doc-toolbar .separator { width: 1px; height: 18px; background: #666; margin: 0 4px; }
+  .doc-type-tabs { background: #3a3a3a; padding: 4px 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .doc-type-tab { padding: 3px 8px; font-size: 10px; border: 1px solid #666; background: #444; color: #ccc; cursor: pointer; border-radius: 2px; }
+  .doc-type-tab.active { background: #2980b9; color: white; border-color: #2980b9; }
+  .file-tabs { background: #2a2a2a; padding: 4px 8px; display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid #555; }
+  .file-tab { display: flex; align-items: center; gap: 4px; padding: 3px 8px; font-size: 10px; border: 1px solid #555; background: #3a3a3a; color: #ccc; cursor: pointer; border-radius: 2px 2px 0 0; white-space: nowrap; }
+  .file-tab .size { color: #888; font-size: 9px; }
+  .file-tab.active { background: #1a1a1a; color: white; border-bottom-color: #1a1a1a; }
+  .file-tab .close { color: #888; margin-left: 4px; }
+  .viewer-area { display: flex; height: calc(100vh - 160px); }
+  .doc-panel { flex: 1; overflow: auto; background: #404040; padding: 10px; }
+  .doc-frame { background: white; max-width: 800px; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+  .pdf-pages-mount { display: flex; flex-direction: column; align-items: center; background: #525659; padding: 20px 0; min-height: 100%; }
+  .pdf-page-canvas { max-width: 100%; height: auto; margin-bottom: 20px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); }
+  .zoom-bar { background: #333; border-top: 1px solid #555; padding: 3px 8px; display: flex; gap: 8px; align-items: center; }
+  .zoom-bar button { padding: 2px 8px; font-size: 11px; border: 1px solid #666; background: #444; color: #ccc; cursor: pointer; }
+  .zoom-bar span { color: #ccc; font-size: 11px; }
+
+  .doc-frame img.scanned-doc { width: 100%; height: auto; display: block; }
+  .doc-frame object.scanned-pdf { width: 100%; min-height: 80vh; display: block; }
+
+  /* Document styles */
+  .doc-pan { padding: 20px; font-family: Arial; }
+  .doc-pan .header { text-align: center; border-bottom: 3px solid #1a3a6e; padding-bottom: 10px; margin-bottom: 15px; }
+  .doc-pan .logo-text { font-size: 22px; font-weight: bold; color: #1a3a6e; }
+  .doc-pan .subtitle { font-size: 11px; color: #555; margin-top: 2px; }
+  .doc-pan .card-body { display: flex; gap: 20px; }
+  .doc-pan .photo-box { width: 90px; height: 110px; border: 2px solid #1a3a6e; background: #f5f5f5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .doc-pan .details { flex: 1; }
+  .doc-pan .detail-row { display: flex; gap: 5px; margin-bottom: 8px; font-size: 12px; }
+  .doc-pan .detail-label { color: #555; font-size: 10px; width: 80px; }
+  .doc-pan .detail-value { font-weight: bold; color: #1a1a1a; font-size: 13px; letter-spacing: 0.5px; }
+  .doc-pan .pan-number { font-size: 20px; font-weight: bold; color: #1a3a6e; letter-spacing: 3px; text-align: center; background: #f0f4ff; padding: 8px; border: 1px solid #c0d0f0; border-radius: 4px; margin-top: 10px; }
+  .doc-pan .signature-box { margin-top: 15px; display: flex; justify-content: space-between; }
+  .doc-pan .sig-line { border-top: 1px solid #333; padding-top: 3px; font-size: 10px; color: #555; width: 120px; text-align: center; }
+
+  .doc-aadhaar { padding: 20px; }
+  .doc-aadhaar .card { background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #1565c0 100%); color: white; border-radius: 8px; padding: 15px; max-width: 380px; }
+  .doc-aadhaar .uidai { font-size: 10px; color: #bbdefb; letter-spacing: 1px; }
+  .doc-aadhaar .aadhaar-title { font-size: 18px; font-weight: bold; letter-spacing: 2px; margin: 3px 0; }
+  .doc-aadhaar .govt-text { font-size: 10px; color: #90caf9; margin-bottom: 10px; }
+  .doc-aadhaar .card-body { display: flex; gap: 15px; align-items: flex-start; }
+  .doc-aadhaar .photo-box { width: 80px; height: 95px; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.4); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: rgba(255,255,255,0.7); text-align: center; }
+  .doc-aadhaar .name { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+  .doc-aadhaar .detail { font-size: 12px; color: #e3f2fd; margin-bottom: 3px; }
+  .doc-aadhaar .aadhaar-num { font-size: 20px; font-weight: bold; letter-spacing: 4px; text-align: center; background: rgba(255,255,255,0.15); padding: 6px; border-radius: 4px; margin-top: 10px; }
+
+  .doc-bank { padding: 15px; font-family: 'Courier New', monospace; }
+  .doc-bank .bank-header { background: #1565c0; color: white; padding: 10px 15px; border-radius: 4px 4px 0 0; display: flex; justify-content: space-between; align-items: center; }
+  .doc-bank .bank-name { font-size: 18px; font-weight: bold; }
+  .doc-bank .stmt-title { font-size: 12px; color: #bbdefb; }
+  .doc-bank .account-info { background: #e3f2fd; padding: 8px 15px; border: 1px solid #90caf9; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; font-size: 11px; }
+  .doc-bank .account-info .field { display: flex; flex-direction: column; }
+  .doc-bank .account-info .field-label { color: #555; font-size: 9px; text-transform: uppercase; }
+  .doc-bank .account-info .field-value { font-weight: bold; color: #1a1a1a; font-size: 12px; }
+  .doc-bank table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+  .doc-bank thead tr { background: #1565c0; color: white; }
+  .doc-bank thead th { padding: 5px 8px; text-align: left; }
+  .doc-bank tbody tr:nth-child(even) { background: #f5f5f5; }
+  .doc-bank tbody td { padding: 4px 8px; border-bottom: 1px solid #e0e0e0; }
+  .doc-bank .credit { color: #27ae60; }
+  .doc-bank .debit { color: #e74c3c; }
+  .doc-bank .balance-row { font-weight: bold; }
+
+  .doc-proposal { padding: 20px; font-size: 11px; }
+  .doc-proposal .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1565c0; padding-bottom: 10px; margin-bottom: 12px; }
+  .doc-proposal .prop-logo { font-size: 18px; font-weight: bold; color: #1565c0; }
+  .doc-proposal .prop-subtitle { font-size: 9px; color: #555; }
+  .doc-proposal .section { margin-bottom: 12px; }
+  .doc-proposal .section h3 { font-size: 11px; background: #e8eaf6; padding: 4px 8px; border-left: 3px solid #1565c0; margin-bottom: 6px; }
+  .doc-proposal .field-row { display: flex; margin-bottom: 3px; }
+  .doc-proposal .field-label { width: 150px; color: #555; font-size: 10px; }
+  .doc-proposal .field-value { font-weight: bold; color: #1a1a1a; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="logo">ICICI PRUDENTIAL</span>
+  <span style="color:#aaa;font-size:11px">Document Viewer | {{ data.app_no }}</span>
+  <a href="/case/{{ data.app_no }}/single" style="color:#74b9ff;font-size:11px;margin-left:auto">&#8592; Back to Case</a>
+</div>
+<div class="doc-toolbar">
+  <button>&#128196; New Pic Viewer</button>
+  <button>&#128202; Tile Viewer</button>
+  <div class="separator"></div>
+  <input type="checkbox" id="chk1"><label for="chk1" style="color:#ccc;font-size:10px"> Proposer ID proof</label>
+  <input type="checkbox" id="chk2"><label for="chk2" style="color:#ccc;font-size:10px"> Proposer Age proof</label>
+  <input type="checkbox" id="chk3"><label for="chk3" style="color:#ccc;font-size:10px"> Proposer Address proof</label>
+  <input type="checkbox" id="chk4"><label for="chk4" style="color:#ccc;font-size:10px"> POM</label>
+  <input type="checkbox" id="chk5"><label for="chk5" style="color:#ccc;font-size:10px"> Application form</label>
+  <input type="checkbox" id="chk6" checked><label for="chk6" style="color:#ccc;font-size:10px"> ACR</label>
+  <input type="checkbox" id="chk7"><label for="chk7" style="color:#ccc;font-size:10px"> CDF</label>
+</div>
+<div class="doc-type-tabs">
+  <span style="color:#aaa;font-size:10px;padding-right:5px">&#128193; SAR</span>
+  <button class="doc-type-tab active" onclick="showDoc('pan')">DigitizeDisc</button>
+  <button class="doc-type-tab" onclick="showDoc('aadhaar')">Proposer KYP</button>
+  <button class="doc-type-tab" onclick="showDoc('bank')">EBI</button>
+</div>
+<div class="file-tabs">
+  <div class="file-tab active" onclick="showDoc('pan')">
+    <span>&#128196;</span>
+    <span>PhotoIDProof</span>
+    <span class="size">72 KB</span>
+    <span class="close">&#10005;</span>
+  </div>
+  <div class="file-tab" onclick="showDoc('aadhaar')">
+    <span>&#128196;</span>
+    <span>Others</span>
+    <span class="size">44 KB</span>
+    <span class="close">&#10005;</span>
+  </div>
+  <div class="file-tab" onclick="showDoc('bank')">
+    <span>&#128196;</span>
+    <span>NonMedicalDeclar</span>
+    <span class="size">85 KB</span>
+    <span class="close">&#10005;</span>
+  </div>
+  <div class="file-tab" onclick="showDoc('proposal')">
+    <span>&#128196;</span>
+    <span>FaceVerificationRep</span>
+    <span class="size">239 KB</span>
+    <span class="close">&#10005;</span>
+  </div>
+  <div class="file-tab" onclick="showDoc('bank')">
+    <span>&#128196;</span>
+    <span>RCR</span>
+    <span class="size">21 KB</span>
+    <span class="close">&#10005;</span>
+  </div>
+</div>
+
+<div class="viewer-area">
+  <div class="doc-panel" id="docPanel">
+
+    <!-- PAN Card Document -->
+    <div id="doc-pan" class="doc-frame">
+      {% if doc_files.get('pan') %}
+        {% if doc_files['pan'].endswith('.pdf') %}
+          <div class="pdf-container" data-url="{{ doc_files['pan'] }}" id="pdf-pan-container">
+            <div id="mount-pan" class="pdf-pages-mount"></div>
+            <div class="pdf-loading" style="text-align:center; padding:20px; color:#aaa;">Loading PDF...</div>
+          </div>
+        {% else %}
+          <img class="scanned-doc" src="{{ doc_files['pan'] }}" alt="PAN Card - {{ data.name }}">
+        {% endif %}
+      {% else %}
+      <div class="doc-pan">
+        <div class="header">
+          <div class="logo-text">INCOME TAX DEPARTMENT</div>
+          <div class="subtitle">GOVT. OF INDIA</div>
+        </div>
+        <div style="text-align:center;font-size:13px;font-weight:bold;color:#1a3a6e;margin-bottom:12px">PERMANENT ACCOUNT NUMBER CARD</div>
+        <div class="card-body">
+          <div class="photo-box">
+            <div style="text-align:center;color:#888;font-size:10px">
+              <div style="font-size:30px">&#128100;</div>
+              <div>Photo</div>
+            </div>
+          </div>
+          <div class="details">
+            <div class="detail-row">
+              <div>
+                <div class="detail-label">Name</div>
+                <div class="detail-value">{{ data.name.upper() }}</div>
+              </div>
+            </div>
+            <div class="detail-row">
+              <div>
+                <div class="detail-label">Father's Name</div>
+                <div class="detail-value">RAM SURESH</div>
+              </div>
+            </div>
+            <div class="detail-row">
+              <div>
+                <div class="detail-label">Date of Birth</div>
+                <div class="detail-value">{{ data.dob }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pan-number">{{ data.pan_no }}</div>
+        <div class="signature-box">
+          <div class="sig-line">Signature</div>
+          <div style="text-align:right;font-size:9px;color:#888">
+            <div>&#9632; &#9632; &#9632; &#9632; &#9632; &#9632; &#9632; &#9632; &#9632; (QR)</div>
+            <div style="margin-top:2px">Issued by: NSDL e-Governance</div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Aadhaar Card Document -->
+    <div id="doc-aadhaar" class="doc-frame" style="display:none">
+      {% if doc_files.get('aadhaar') %}
+        {% if doc_files['aadhaar'].endswith('.pdf') %}
+          <div class="pdf-container" data-url="{{ doc_files['aadhaar'] }}" id="pdf-aadhaar-container">
+            <div id="mount-aadhaar" class="pdf-pages-mount"></div>
+            <div class="pdf-loading" style="text-align:center; padding:20px; color:#aaa;">Loading PDF...</div>
+          </div>
+        {% else %}
+          <img class="scanned-doc" src="{{ doc_files['aadhaar'] }}" alt="Aadhaar Card - {{ data.name }}">
+        {% endif %}
+      {% else %}
+      <div class="doc-aadhaar">
+        <div style="text-align:center;padding:10px 0;font-size:11px;color:#555;border-bottom:1px solid #ddd;margin-bottom:10px">UNIQUE IDENTIFICATION AUTHORITY OF INDIA (UIDAI)</div>
+        <div class="card">
+          <div class="uidai">UNIQUE IDENTIFICATION AUTHORITY OF INDIA</div>
+          <div class="aadhaar-title">&#2310;&#2343;&#2366;&#2352; | AADHAAR</div>
+          <div class="govt-text">Government of India</div>
+          <div class="card-body">
+            <div class="photo-box">
+              <div>&#128100;<br><span style="font-size:8px">Photo</span></div>
+            </div>
+            <div style="flex:1">
+              <div class="name">{{ data.name.upper() }}</div>
+              <div class="detail">DOB: {{ data.dob }}</div>
+              <div class="detail">Gender: {{ data.gender }}</div>
+              <div class="detail" style="font-size:10px">{{ data.address1 }}, {{ data.city }}, {{ data.state }} - {{ data.pincode }}</div>
+            </div>
+          </div>
+          <div class="aadhaar-num">{{ data.aadhaar_no }}</div>
+        </div>
+        <div style="margin-top:8px;font-size:9px;color:#888;text-align:center">
+          This is a computer generated document. No signature required.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Bank Statement Document -->
+    <div id="doc-bank" class="doc-frame" style="display:none">
+      {% if doc_files.get('bank_statement') %}
+        {% if doc_files['bank_statement'].endswith('.pdf') %}
+          <div class="pdf-container" data-url="{{ doc_files['bank_statement'] }}" id="pdf-bank-container">
+            <div id="mount-bank" class="pdf-pages-mount"></div>
+            <div class="pdf-loading" style="text-align:center; padding:20px; color:#aaa;">Loading PDF...</div>
+          </div>
+        {% else %}
+          <img class="scanned-doc" src="{{ doc_files['bank_statement'] }}" alt="Bank Statement - {{ data.name }}">
+        {% endif %}
+      {% else %}
+      <div class="doc-bank">
+        <div class="bank-header">
+          <div>
+            <div class="bank-name">{{ data.bank_name }}</div>
+          <div class="field">
+            <span class="field-label">Account Holder</span>
+            <span class="field-value">{{ data.name.upper() }}</span>
+          </div>
+          <div class="field">
+            <span class="field-label">Account Number</span>
+            <span class="field-value">{{ data.bank_account }}</span>
+          </div>
+          <div class="field">
+            <span class="field-label">Account Type</span>
+            <span class="field-value">SAVINGS</span>
+          </div>
+          <div class="field">
+            <span class="field-label">IFSC Code</span>
+            <span class="field-value">{{ data.ifsc }}</span>
+          </div>
+          <div class="field">
+            <span class="field-label">Branch</span>
+            <span class="field-value">{{ data.city }} MAIN</span>
+          </div>
+          <div class="field">
+            <span class="field-label">Opening Balance</span>
+            <span class="field-value">&#8377; 1,24,500.00</span>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Chq/Ref No</th>
+              <th>Debit (&#8377;)</th>
+              <th>Credit (&#8377;)</th>
+              <th>Balance (&#8377;)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>01-Oct-2024</td><td>Opening Balance</td><td></td><td></td><td></td><td class="balance-row">1,24,500.00</td></tr>
+            <tr><td>05-Oct-2024</td><td>SALARY CREDIT - OCT 2024</td><td>NEFT0012345</td><td></td><td class="credit">1,00,000.00</td><td class="balance-row">2,24,500.00</td></tr>
+            <tr><td>08-Oct-2024</td><td>RENT PAYMENT</td><td>IMPS9876543</td><td class="debit">25,000.00</td><td></td><td class="balance-row">1,99,500.00</td></tr>
+            <tr><td>12-Oct-2024</td><td>MUTUAL FUND SIP - HDFC</td><td>ECS1234567</td><td class="debit">10,000.00</td><td></td><td class="balance-row">1,89,500.00</td></tr>
+            <tr><td>15-Oct-2024</td><td>ATM WITHDRAWAL</td><td>ATM8765432</td><td class="debit">15,000.00</td><td></td><td class="balance-row">1,74,500.00</td></tr>
+            <tr><td>20-Oct-2024</td><td>ICICI PRUDENTIAL INS PREMIUM</td><td>INS4321098</td><td class="debit">4,167.00</td><td></td><td class="balance-row">1,70,333.00</td></tr>
+            <tr><td>05-Nov-2024</td><td>SALARY CREDIT - NOV 2024</td><td>NEFT0023456</td><td></td><td class="credit">1,00,000.00</td><td class="balance-row">2,70,333.00</td></tr>
+            <tr><td>10-Nov-2024</td><td>UPI - AMAZON SHOPPING</td><td>UPI3456789</td><td class="debit">8,500.00</td><td></td><td class="balance-row">2,61,833.00</td></tr>
+            <tr><td>12-Nov-2024</td><td>MUTUAL FUND SIP - HDFC</td><td>ECS1234568</td><td class="debit">10,000.00</td><td></td><td class="balance-row">2,51,833.00</td></tr>
+            <tr><td>08-Nov-2024</td><td>RENT PAYMENT</td><td>IMPS9876544</td><td class="debit">25,000.00</td><td></td><td class="balance-row">2,26,833.00</td></tr>
+            <tr><td>05-Dec-2024</td><td>SALARY CREDIT - DEC 2024</td><td>NEFT0034567</td><td></td><td class="credit">1,00,000.00</td><td class="balance-row">3,26,833.00</td></tr>
+            <tr><td>10-Dec-2024</td><td>RENT PAYMENT</td><td>IMPS9876545</td><td class="debit">25,000.00</td><td></td><td class="balance-row">3,01,833.00</td></tr>
+            <tr><td>15-Dec-2024</td><td>ATM WITHDRAWAL</td><td>ATM8765433</td><td class="debit">20,000.00</td><td></td><td class="balance-row">2,81,833.00</td></tr>
+            <tr><td>20-Dec-2024</td><td>ICICI PRUDENTIAL INS PREMIUM</td><td>INS4321099</td><td class="debit">4,167.00</td><td></td><td class="balance-row">2,77,666.00</td></tr>
+            <tr style="background:#e8f5e9;font-weight:bold"><td>31-Dec-2024</td><td>Closing Balance</td><td></td><td></td><td></td><td class="credit">2,77,666.00</td></tr>
+          </tbody>
+        </table>
+        <div style="padding:8px;font-size:10px;color:#555;border-top:1px solid #ddd;margin-top:5px">
+          This statement is computer generated. For queries, contact your branch or call 1800-258-3838.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Proposal Document -->
+    <div id="doc-proposal" class="doc-frame" style="display:none">
+      {% if doc_files.get('proposal') %}
+        {% if doc_files['proposal'].endswith('.pdf') %}
+          <div class="pdf-container" data-url="{{ doc_files['proposal'] }}" id="pdf-proposal-container">
+            <canvas class="pdf-canvas" id="canvas-proposal"></canvas>
+            <div class="pdf-loading" style="text-align:center; padding:20px; color:#aaa;">Loading PDF...</div>
+          </div>
+        {% else %}
+          <img class="scanned-doc" src="{{ doc_files['proposal'] }}" alt="Proposal Form - {{ data.name }}">
+        {% endif %}
+      {% else %}
+      <div class="doc-proposal">
+        <div class="header">
+          <div>
+            <div class="prop-logo">ICICI PRUDENTIAL</div>
+            <div class="prop-subtitle">Life Insurance Company Limited | CIN: L66010MH2000PLC127837</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:9px;color:#555">Proposal No: {{ data.app_no }}</div>
+            <div style="font-size:9px;color:#555">Date: 27-Dec-2024</div>
+          </div>
+        </div>
+        <div style="background:#fff3cd;border:1px solid #ffc107;padding:6px 10px;font-size:10px;margin-bottom:10px;border-radius:3px">
+          &#9888; ICICI PRUDENTIAL INSURANCE PL. THE INVESTMENT RISK IN INVESTMENT PORTFOLIO IS BORNE BY THE POLICYHOLDER.
+          I/We confirm that the premium/amount for the Issue and pay the regular. This Proposal will be subject to be required the decision to dispose of to be a risk.
+        </div>
+        <div class="section">
+          <h3>&#128196; Proposal/Life Assured Basic Details</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px">
+            <div class="field-row"><span class="field-label">Proposal No</span><span class="field-value">{{ data.app_no }}</span></div>
+            <div class="field-row"><span class="field-label">Advisor Code</span><span class="field-value">{{ data.advisor_code }}</span></div>
+            <div class="field-row"><span class="field-label">Life Assured Name</span><span class="field-value">{{ data.name.upper() }}</span></div>
+            <div class="field-row"><span class="field-label">Date of Birth</span><span class="field-value">{{ data.dob }}</span></div>
+            <div class="field-row"><span class="field-label">Gender</span><span class="field-value">{{ data.gender.upper() }}</span></div>
+            <div class="field-row"><span class="field-label">Nationality</span><span class="field-value">{{ data.nationality.upper() }}</span></div>
+          </div>
+        </div>
+        <div class="section">
+          <h3>&#128100; Proposer/Life Assured Electronic Account Details</h3>
+          <div class="field-row"><span class="field-label">Account No</span><span class="field-value" style="font-family:monospace;letter-spacing:1px">{{ data.bank_account }}</span></div>
+          <div class="field-row"><span class="field-label">IFSC</span><span class="field-value" style="font-family:monospace">{{ data.ifsc }}</span></div>
+          <div class="field-row"><span class="field-label">Bank Name</span><span class="field-value">{{ data.bank_name }}</span></div>
+          <div class="field-row"><span class="field-label">ECS/NACH Mandate</span><span class="field-value" style="color:#27ae60">REGISTERED</span></div>
+        </div>
+        <div class="section">
+          <h3>&#128100; Proposer/Life Assured Personal Details</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px">
+            <div class="field-row"><span class="field-label">PAN Number</span><span class="field-value" style="font-family:monospace;letter-spacing:1px">{{ data.pan_no }}</span></div>
+            <div class="field-row"><span class="field-label">Aadhaar Number</span><span class="field-value" style="font-family:monospace;letter-spacing:1px">{{ data.aadhaar_no }}</span></div>
+            <div class="field-row"><span class="field-label">Address</span><span class="field-value">{{ data.address1 }}, {{ data.city }}</span></div>
+            <div class="field-row"><span class="field-label">Pincode</span><span class="field-value">{{ data.pincode }}</span></div>
+            <div class="field-row"><span class="field-label">Occupation</span><span class="field-value">PRIVATE</span></div>
+            <div class="field-row"><span class="field-label">Annual Income</span><span class="field-value">&#8377; {{ "{:,.0f}".format(data.annual_income) }}</span></div>
+          </div>
+        </div>
+        <div style="margin-top:15px;padding:8px;border:1px solid #ddd;border-radius:3px;font-size:10px">
+          <strong>Declaration:</strong> I/We hereby declare that the statements made and all information given to ICICI Prudential Life Insurance Company Limited (hereinafter referred to as the Company) are true and correct in every particular and no material information has been withheld or concealed.
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:20px;padding-top:10px;border-top:1px solid #ddd">
+          <div style="text-align:center">
+            <div style="width:120px;border-top:1px solid #333;padding-top:3px;font-size:9px">Signature of Proposer</div>
+          </div>
+          <div style="text-align:center">
+            <div style="width:120px;border-top:1px solid #333;padding-top:3px;font-size:9px">Signature of LA (if different)</div>
+          </div>
+          <div style="text-align:center">
+            <div style="width:120px;border-top:1px solid #333;padding-top:3px;font-size:9px">Witness Signature</div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+<div class="zoom-bar">
+  <button onclick="zoom(-10)">&#8722;</button>
+  <span id="zoomLevel">100%</span>
+  <button onclick="zoom(10)">&#43;</button>
+  <button onclick="fitPage()">Fit Page</button>
+  <span style="margin-left:auto;font-size:10px;color:#888">Proposal No: {{ data.app_no }} | {{ data.name }}</span>
+</div>
+
+<script>
+let currentZoom = 100;
+let currentDoc = 'pan';
+function showDoc(docId) {
+  ['pan', 'aadhaar', 'bank', 'proposal'].forEach(id => {
+    const el = document.getElementById('doc-' + id);
+    if (el) el.style.display = id === docId ? 'block' : 'none';
+  });
+  document.querySelectorAll('.file-tab').forEach(t => t.classList.remove('active'));
+  currentDoc = docId;
+  // update active tab
+  const tabs = document.querySelectorAll('.file-tab');
+  const docMap = {pan: 0, aadhaar: 1, bank: 2, proposal: 3};
+  if (tabs[docMap[docId]]) tabs[docMap[docId]].classList.add('active');
+
+  // Trigger PDF rendering if it's a PDF container
+  const container = document.getElementById('pdf-' + docId + '-container');
+  if (container) {
+    renderPdfToCanvas(container.dataset.url, 'mount-' + docId, container.querySelector('.pdf-loading'));
+  }
+}
+
+async function renderPdfToCanvas(url, mountId, loadingEl) {
+  const mount = document.getElementById(mountId);
+  if (!mount || mount.dataset.loaded === url) return;
+  
+  if (loadingEl) loadingEl.style.display = 'block';
+  mount.innerHTML = ''; // Clear previous pages
+
+  try {
+    const loadingTask = pdfjsLib.getDocument(url);
+    const pdf = await loadingTask.promise;
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        canvas.className = 'pdf-page-canvas';
+        mount.appendChild(canvas);
+        
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        canvas.style.display = 'block';
+        canvas.style.marginBottom = '20px';
+        canvas.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+        canvas.style.background = 'white';
+
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport
+        };
+        await page.render(renderContext).promise;
+    }
+    
+    mount.dataset.loaded = url;
+    if (loadingEl) loadingEl.style.display = 'none';
+  } catch (error) {
+    console.error('Error rendering PDF:', error);
+    if (loadingEl) loadingEl.innerHTML = '<span style="color:red">Error loading PDF: ' + error.message + '</span>';
+  }
+}
+
+// Auto-load initial PDF if present
+window.addEventListener('DOMContentLoaded', () => {
+    const activeFrame = document.querySelector('.doc-frame:not([style*="display:none"])');
+    if (activeFrame) {
+        const container = activeFrame.querySelector('.pdf-container');
+        if (container) {
+            const docId = activeFrame.id.replace('doc-', '');
+            renderPdfToCanvas(container.dataset.url, 'mount-' + docId, container.querySelector('.pdf-loading'));
+        }
+    }
+});
+
+function zoom(delta) {
+  currentZoom = Math.max(50, Math.min(200, currentZoom + delta));
+  document.querySelectorAll('.doc-frame').forEach(f => {
+    f.style.transform = `scale(${currentZoom/100})`;
+    f.style.transformOrigin = 'top center';
+  });
+  document.getElementById('zoomLevel').textContent = currentZoom + '%';
+}
+function fitPage() {
+  currentZoom = 100;
+  document.querySelectorAll('.doc-frame').forEach(f => { f.style.transform = ''; });
+  document.getElementById('zoomLevel').textContent = '100%';
+}
+</script>
+</body>
+</html>

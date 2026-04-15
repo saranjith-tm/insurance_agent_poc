@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Underwriting Checklist — {{ state.application_no }}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 14px; background: #f4f5f7; color: #333; }
+
+  .app-header { background: white; border-bottom: 2px solid #e0e0e0; padding: 10px 16px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+  .app-header .app-title { font-size: 16px; font-weight: 600; color: #1a237e; }
+  .app-header .app-no { font-size: 12px; color: #666; background: #e8eaf6; padding: 3px 10px; border-radius: 12px; }
+  .db-badge { font-size: 10px; background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 10px; border: 1px solid #a5d6a7; }
+  .save-indicator { font-size: 11px; color: #43a047; display: none; }
+  .sub-id-badge { font-size: 10px; color: #9e9e9e; }
+  .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .status-inprogress { background: #e3f2fd; color: #1565c0; }
+  .status-pending { background: #fff3e0; color: #e65100; }
+  .status-completed { background: #e8f5e9; color: #2e7d32; }
+  .status-referred { background: #f3e5f5; color: #7b1fa2; }
+
+  /* Submit modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:200; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:white; border-radius:10px; padding:24px; width:420px; box-shadow:0 8px 32px rgba(0,0,0,0.2); }
+  .modal h2 { font-size:16px; color:#1a237e; margin-bottom:12px; }
+  .modal .field-group { margin-bottom:12px; }
+  .modal label { font-size:12px; font-weight:600; color:#555; display:block; margin-bottom:4px; }
+  .modal select, .modal textarea { width:100%; padding:7px 10px; font-size:13px; border:1px solid #ddd; border-radius:6px; }
+  .modal textarea { height:80px; resize:vertical; }
+  .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .btn-accept  { background:#2e7d32; color:white; }
+  .btn-refer   { background:#7b1fa2; color:white; }
+  .btn-reject  { background:#c62828; color:white; }
+  .btn-cancel  { background:white; border:1px solid #ddd; color:#555; }
+  .result-banner { display:none; padding:12px 16px; border-radius:6px; margin:12px 16px; font-size:13px; font-weight:600; }
+  .result-accepted  { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
+  .result-referred  { background:#f3e5f5; color:#7b1fa2; border:1px solid #ce93d8; }
+  .result-rejected  { background:#fde8e8; color:#c62828; border:1px solid #ef9a9a; }
+  .fup-badge { background: #fff3e0; color: #e65100; padding: 3px 10px; border-radius: 12px; font-size: 11px; display: flex; align-items: center; gap: 4px; }
+
+  .main-content { max-width: 700px; margin: 16px auto; padding: 0 16px; }
+
+  .card { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); margin-bottom: 16px; overflow: hidden; }
+  .card-header { padding: 12px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+  .card-header:hover { background: #f8f9fa; }
+  .card-icon { font-size: 16px; }
+  .card-title { font-size: 15px; font-weight: 600; color: #1a237e; flex: 1; }
+  .card-progress { font-size: 11px; color: #666; background: #f0f0f0; padding: 2px 8px; border-radius: 10px; }
+  .card-fup { background: #fff3e0; color: #e65100; font-size: 11px; padding: 2px 8px; border-radius: 10px; display: flex; align-items: center; gap: 3px; }
+  .card-chevron { color: #999; transition: transform 0.2s; font-size: 12px; }
+  .card-chevron.open { transform: rotate(180deg); }
+  .card-body { padding: 0; }
+  .card-body.collapsed { display: none; }
+
+  .section { border-bottom: 1px solid #f0f0f0; }
+  .section:last-child { border-bottom: none; }
+  .section-header { padding: 10px 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; background: #fafafa; border-bottom: 1px solid #f0f0f0; }
+  .section-header:hover { background: #f0f0f0; }
+  .section-icon { font-size: 14px; }
+  .section-title { font-size: 13px; font-weight: 600; color: #333; flex: 1; }
+  .section-fup { background: #fff3e0; color: #e65100; font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+  .section-validated { background: #e8f5e9; color: #2e7d32; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .section-chevron { color: #bbb; font-size: 11px; transition: transform 0.2s; }
+  .section-content { padding: 12px 16px; }
+  .section-content.collapsed { display: none; }
+
+  .field-group { margin-bottom: 12px; }
+  .field-label { font-size: 12px; color: #555; margin-bottom: 5px; font-weight: 500; }
+  .field-label .req { color: #e53935; }
+
+  .select-field { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px solid #ddd; border-radius: 6px; background: white; appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 8px center; background-size: 14px; }
+  .select-field:focus { outline: none; border-color: #3f51b5; box-shadow: 0 0 0 2px rgba(63,81,181,0.1); }
+
+  .text-field { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px solid #ddd; border-radius: 6px; font-family: monospace; letter-spacing: 1px; }
+  .text-field:focus { outline: none; border-color: #3f51b5; box-shadow: 0 0 0 2px rgba(63,81,181,0.1); }
+  .text-field.filled { border-color: #43a047; background: #f1f8e9; }
+
+  .yn-group { display: flex; gap: 8px; align-items: center; }
+  .yn-btn { padding: 6px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+  .yn-btn.yes { background: white; border-color: #ddd; color: #555; }
+  .yn-btn.yes.selected { background: #2e7d32; border-color: #2e7d32; color: white; }
+  .yn-btn.no { background: white; border-color: #ddd; color: #555; }
+  .yn-btn.no.selected { background: #c62828; border-color: #c62828; color: white; }
+  .yn-btn:hover { border-color: #999; }
+  .yn-btn.yes:hover:not(.selected) { border-color: #2e7d32; color: #2e7d32; }
+  .yn-btn.no:hover:not(.selected) { border-color: #c62828; color: #c62828; }
+
+  .info-box { background: #f3f4f6; border-left: 3px solid #9e9e9e; padding: 8px 12px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; margin: 6px 0; }
+  .info-box.success { background: #e8f5e9; border-left-color: #43a047; color: #2e7d32; }
+  .info-box.warning { background: #fff8e1; border-left-color: #ffb300; color: #7a5c00; }
+
+  .action-bar { display: flex; justify-content: space-between; padding: 12px 16px; background: white; border-top: 1px solid #e0e0e0; position: sticky; bottom: 0; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); }
+  .btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-back { background: white; border: 1px solid #ddd; color: #555; }
+  .btn-back:hover { background: #f5f5f5; }
+  .btn-next { background: #6200ea; color: white; }
+  .btn-next:hover { background: #5000d0; }
+  .btn-next:disabled { background: #bbb; cursor: not-allowed; }
+
+  .progress-indicator { display: flex; gap: 6px; align-items: center; padding: 6px 16px; background: #f4f5f7; }
+  .prog-dot { width: 8px; height: 8px; border-radius: 50%; background: #ddd; }
+  .prog-dot.done { background: #43a047; }
+  .prog-dot.active { background: #3f51b5; width: 20px; border-radius: 4px; }
+
+  .complete-check { color: #43a047; font-size: 14px; }
+  .pending-circle { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #bbb; display: inline-block; }
+
+  /* Automation highlight */
+  .auto-highlight { animation: pulse-highlight 1s ease-in-out 3; }
+  @keyframes pulse-highlight {
+    0% { box-shadow: 0 0 0 0 rgba(63,81,181,0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(63,81,181,0); }
+    100% { box-shadow: 0 0 0 0 rgba(63,81,181,0); }
+  }
+  .auto-click-flash { animation: flash 0.5s; }
+  @keyframes flash {
+    0% { background: #e8eaf6; }
+    50% { background: #c5cae9; }
+    100% { background: inherit; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <span class="app-title">&#9989; Underwriting Checklist</span>
+  <span class="app-no" id="header-app-no">{{ state.application_no }}</span>
+  <span class="status-badge status-inprogress" id="overall-status">{{ state.overall_status }}</span>
+  <span class="fup-badge" id="fup-badge">&#9432; {{ state.fup_count }} FUP(s) raised across all sections</span>
+  {% if case %}
+  <span style="font-size:11px;color:#666">{{ case.name }}</span>
+  {% endif %}
+  <span class="db-badge">&#128190; SQLite</span>
+  <span id="save-indicator" class="save-indicator">&#10003; Saved</span>
+  <span id="sub-id-badge" class="sub-id-badge">
+    {% if state._submission_id %}SUB-{{ "%05d"|format(state._submission_id) }}{% endif %}
+  </span>
+  <span style="margin-left:auto;font-size:11px;color:#888">Auto-save ON</span>
+</div>
+
+<!-- Result banner shown after submission -->
+<div id="result-banner" class="result-banner"></div>
+
+<div class="main-content">
+
+  <!-- CARD 1: Case Details -->
+  <div class="card" id="card1">
+    <div class="card-header" onclick="toggleCard('card1-body', this)">
+      <span class="card-icon">&#128203;</span>
+      <span class="card-title">Case Details</span>
+      <span class="status-badge status-inprogress">In Progress</span>
+      <span class="card-chevron open">&#9660;</span>
+    </div>
+    <div class="card-body" id="card1-body">
+      <!-- Blue Summary -->
+      <div style="padding:10px 16px;background:#e3f2fd;border-bottom:1px solid #bbdefb">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:600;color:#1565c0">&#128220; Blue Summary</span>
+          <span class="status-badge status-pending">Pending</span>
+        </div>
+        <div style="font-size:11px;color:#1565c0;background:white;padding:6px 10px;border-radius:4px;border:1px solid #90caf9">
+          ISA, TRSA, TSA, Income values will be auto-populated once Application Details are confirmed.
+        </div>
+      </div>
+
+      <!-- Application Details -->
+      <div style="padding:12px 16px">
+        <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">&#128194; Application Details</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field-group">
+            <div class="field-label">Application Number</div>
+            <input type="text" id="input_application_no" class="text-field" placeholder="Enter Application No"
+              value="{{ state.cards.card1.fields.application_no }}"
+              onchange="fillField('application_no', this.value)" oninput="updateFieldStyle(this)">
+          </div>
+          <div class="field-group">
+            <div class="field-label">CA/ICSA No.</div>
+            <input type="text" id="input_ca_ics_no" class="text-field" placeholder="Enter CA/ICSA No"
+              value="{{ state.cards.card1.fields.ca_ics_no }}"
+              onchange="fillField('ca_ics_no', this.value)" oninput="updateFieldStyle(this)">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Case Type</div>
+            <select class="select-field" id="input_case_type" onchange="fillField('case_type', this.value)">
+              <option value="">Select...</option>
+              <option {% if state.cards.card1.fields.case_type == 'AMR' %}selected{% endif %}>AMR</option>
+              <option {% if state.cards.card1.fields.case_type == 'Fresh' %}selected{% endif %}>Fresh</option>
+              <option {% if state.cards.card1.fields.case_type == 'Revival' %}selected{% endif %}>Revival</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Sourcing Channel</div>
+            <select class="select-field" id="input_sourcing_channel" onchange="fillField('sourcing_channel', this.value)">
+              <option value="">Select...</option>
+              <option>FR</option><option>Bancassurance</option><option>Online</option><option>Direct</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Proposed Status</div>
+            <select class="select-field" id="input_proposed_status" onchange="fillField('proposed_status', this.value)">
+              <option value="">Select...</option>
+              <option>LA</option><option>Proposer</option><option>Joint LA</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Gender of LA</div>
+            <select class="select-field" id="input_gender_la" onchange="fillField('gender_la', this.value)">
+              <option value="">Select Gender</option>
+              <option {% if state.cards.card1.fields.gender_la == 'Male' %}selected{% endif %}>Male</option>
+              <option {% if state.cards.card1.fields.gender_la == 'Female' %}selected{% endif %}>Female</option>
+              <option {% if state.cards.card1.fields.gender_la == 'Other' %}selected{% endif %}>Other</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Branch Location :</div>
+            <input type="text" id="input_branch_location" class="text-field" placeholder="Enter Branch Location"
+              value="{{ state.cards.card1.fields.branch_location }}"
+              onchange="fillField('branch_location', this.value)" oninput="updateFieldStyle(this)">
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:8px 16px;border-top:1px solid #f0f0f0">
+        <div class="field-group" style="margin:0">
+          <div class="field-label">Plan &amp; Product</div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0">
+            <span style="font-size:12px;color:#555">Plan details auto-populated from system</span>
+            <span class="status-badge status-pending">Pending</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CARD 2: Audit 5 & KYC Checks -->
+  <div class="card" id="card2">
+    <div class="card-header" onclick="toggleCard('card2-body', this)">
+      <span class="card-icon">&#128179;</span>
+      <span class="card-title">Card 2: Audit 5 &amp; KYC Checks</span>
+      <span class="card-progress" id="card2-progress">0/6 Sections</span>
+      <span class="card-fup">&#9432; {{ state.fup_count }} FUP(s) raised across all sections</span>
+      <span class="card-chevron open">&#9660;</span>
+    </div>
+    <div class="card-body" id="card2-body">
+
+      <!-- Section 1: Nationality -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-nationality', this)">
+          <span class="section-icon">&#127758;</span>
+          <span class="section-title">1. Nationality / Resident Status</span>
+          <span id="nationality-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-nationality">
+          <div class="field-group">
+            <div class="field-label">Declared Residence (IUW)</div>
+            <select class="select-field" id="input_declared_residence_iuw"
+              onchange="fillField('declared_residence_iuw', this.value); checkNationalityComplete()">
+              <option value="">Select...</option>
+              <option {% if state.cards.card2.sections.nationality.fields.declared_residence_iuw == 'Resident Indian' %}selected{% endif %}>Resident Indian</option>
+              <option {% if state.cards.card2.sections.nationality.fields.declared_residence_iuw == 'NRI' %}selected{% endif %}>NRI</option>
+              <option {% if state.cards.card2.sections.nationality.fields.declared_residence_iuw == 'PIO' %}selected{% endif %}>PIO</option>
+              <option {% if state.cards.card2.sections.nationality.fields.declared_residence_iuw == 'Foreign National' %}selected{% endif %}>Foreign National</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: PAN Validation -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-pan', this)">
+          <span class="section-icon">&#128179;</span>
+          <span class="section-title">2. PAN / PAL Validation</span>
+          <span class="section-fup" id="pan-fup-badge">FUP Raised</span>
+          <span id="pan-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-pan">
+          <div class="field-group">
+            <div class="field-label">Type of Document Uploaded</div>
+            <select class="select-field" id="input_doc_type">
+              <option selected>Physical Pan</option>
+              <option>e-PAN</option>
+              <option>PAL</option>
+              <option>Form 60</option>
+            </select>
+          </div>
+
+          <div style="font-size:12px;font-weight:600;color:#555;margin:10px 0 8px;padding-bottom:4px;border-bottom:1px solid #f0f0f0">PAN Card Validation</div>
+
+          <div class="field-group">
+            <div class="field-label">1. Is the PAN Card Copy of LA uploaded?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.pan_validation.fields.pan_copy_uploaded == True %}selected{% endif %}"
+                id="btn_pan_copy_uploaded_yes"
+                onclick="clickYesNo('pan_copy_uploaded', true, 'btn_pan_copy_uploaded_yes', 'btn_pan_copy_uploaded_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.pan_validation.fields.pan_copy_uploaded == False %}selected{% endif %}"
+                id="btn_pan_copy_uploaded_no"
+                onclick="clickYesNo('pan_copy_uploaded', false, 'btn_pan_copy_uploaded_yes', 'btn_pan_copy_uploaded_no')">No</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-label">2. Whether PAN Card Copy Clear?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.pan_validation.fields.pan_copy_clear == True %}selected{% endif %}"
+                id="btn_pan_copy_clear_yes"
+                onclick="clickYesNo('pan_copy_clear', true, 'btn_pan_copy_clear_yes', 'btn_pan_copy_clear_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.pan_validation.fields.pan_copy_clear == False %}selected{% endif %}"
+                id="btn_pan_copy_clear_no"
+                onclick="clickYesNo('pan_copy_clear', false, 'btn_pan_copy_clear_yes', 'btn_pan_copy_clear_no')">No</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-label">3. Whether LA DOB matches with IUW?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.pan_validation.fields.dob_matches_iuw == True %}selected{% endif %}"
+                id="btn_dob_matches_iuw_yes"
+                onclick="clickYesNo('dob_matches_iuw', true, 'btn_dob_matches_iuw_yes', 'btn_dob_matches_iuw_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.pan_validation.fields.dob_matches_iuw == False %}selected{% endif %}"
+                id="btn_dob_matches_iuw_no"
+                onclick="clickYesNo('dob_matches_iuw', false, 'btn_dob_matches_iuw_yes', 'btn_dob_matches_iuw_no')">No</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-label">4. Enter PAN Number (as on document)</div>
+            <input type="text" id="input_pan_number_entered" class="text-field"
+              placeholder="e.g. ABCDE1234F"
+              value="{{ state.cards.card2.sections.pan_validation.fields.pan_number_entered }}"
+              oninput="updateFieldStyle(this)"
+              onchange="fillField('pan_number_entered', this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Aadhaar Validation -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-aadhaar', this)">
+          <span class="section-icon">&#128196;</span>
+          <span class="section-title">3. Aadhaar Validation</span>
+          <span id="aadhaar-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-aadhaar">
+          <div class="field-group">
+            <div class="field-label">1. Is the Aadhaar Copy uploaded?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.aadhaar_validation.fields.aadhaar_copy_uploaded == True %}selected{% endif %}"
+                id="btn_aadhaar_copy_uploaded_yes"
+                onclick="clickYesNo('aadhaar_copy_uploaded', true, 'btn_aadhaar_copy_uploaded_yes', 'btn_aadhaar_copy_uploaded_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.aadhaar_validation.fields.aadhaar_copy_uploaded == False %}selected{% endif %}"
+                id="btn_aadhaar_copy_uploaded_no"
+                onclick="clickYesNo('aadhaar_copy_uploaded', false, 'btn_aadhaar_copy_uploaded_yes', 'btn_aadhaar_copy_uploaded_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">2. Whether Aadhaar Copy Clear?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.aadhaar_validation.fields.aadhaar_copy_clear == True %}selected{% endif %}"
+                id="btn_aadhaar_copy_clear_yes"
+                onclick="clickYesNo('aadhaar_copy_clear', true, 'btn_aadhaar_copy_clear_yes', 'btn_aadhaar_copy_clear_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.aadhaar_validation.fields.aadhaar_copy_clear == False %}selected{% endif %}"
+                id="btn_aadhaar_copy_clear_no"
+                onclick="clickYesNo('aadhaar_copy_clear', false, 'btn_aadhaar_copy_clear_yes', 'btn_aadhaar_copy_clear_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">3. Whether Name on Aadhaar matches IUW?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.aadhaar_validation.fields.aadhaar_name_matches == True %}selected{% endif %}"
+                id="btn_aadhaar_name_matches_yes"
+                onclick="clickYesNo('aadhaar_name_matches', true, 'btn_aadhaar_name_matches_yes', 'btn_aadhaar_name_matches_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.aadhaar_validation.fields.aadhaar_name_matches == False %}selected{% endif %}"
+                id="btn_aadhaar_name_matches_no"
+                onclick="clickYesNo('aadhaar_name_matches', false, 'btn_aadhaar_name_matches_yes', 'btn_aadhaar_name_matches_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">4. Whether Aadhaar DOB matches IUW?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.aadhaar_validation.fields.aadhaar_dob_matches == True %}selected{% endif %}"
+                id="btn_aadhaar_dob_matches_yes"
+                onclick="clickYesNo('aadhaar_dob_matches', true, 'btn_aadhaar_dob_matches_yes', 'btn_aadhaar_dob_matches_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.aadhaar_validation.fields.aadhaar_dob_matches == False %}selected{% endif %}"
+                id="btn_aadhaar_dob_matches_no"
+                onclick="clickYesNo('aadhaar_dob_matches', false, 'btn_aadhaar_dob_matches_yes', 'btn_aadhaar_dob_matches_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">5. Enter Aadhaar Number (last 4 digits masked)</div>
+            <input type="text" id="input_aadhaar_number_entered" class="text-field"
+              placeholder="e.g. XXXX XXXX 9012"
+              value="{{ state.cards.card2.sections.aadhaar_validation.fields.aadhaar_number_entered }}"
+              oninput="updateFieldStyle(this)"
+              onchange="fillField('aadhaar_number_entered', this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Address Proof -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-address', this)">
+          <span class="section-icon">&#127968;</span>
+          <span class="section-title">4. Address Proof Validation</span>
+          <span id="address-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-address">
+          <div class="field-group">
+            <div class="field-label">1. Is Address Proof document uploaded?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.address_proof.fields.address_doc_uploaded == True %}selected{% endif %}"
+                id="btn_address_doc_uploaded_yes"
+                onclick="clickYesNo('address_doc_uploaded', true, 'btn_address_doc_uploaded_yes', 'btn_address_doc_uploaded_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.address_proof.fields.address_doc_uploaded == False %}selected{% endif %}"
+                id="btn_address_doc_uploaded_no"
+                onclick="clickYesNo('address_doc_uploaded', false, 'btn_address_doc_uploaded_yes', 'btn_address_doc_uploaded_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">2. Is the Address Proof document clearly legible?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.address_proof.fields.address_doc_clear == True %}selected{% endif %}"
+                id="btn_address_doc_clear_yes"
+                onclick="clickYesNo('address_doc_clear', true, 'btn_address_doc_clear_yes', 'btn_address_doc_clear_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.address_proof.fields.address_doc_clear == False %}selected{% endif %}"
+                id="btn_address_doc_clear_no"
+                onclick="clickYesNo('address_doc_clear', false, 'btn_address_doc_clear_yes', 'btn_address_doc_clear_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">3. Does address on document match IUW records?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.address_proof.fields.address_matches_iuw == True %}selected{% endif %}"
+                id="btn_address_matches_iuw_yes"
+                onclick="clickYesNo('address_matches_iuw', true, 'btn_address_matches_iuw_yes', 'btn_address_matches_iuw_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.address_proof.fields.address_matches_iuw == False %}selected{% endif %}"
+                id="btn_address_matches_iuw_no"
+                onclick="clickYesNo('address_matches_iuw', false, 'btn_address_matches_iuw_yes', 'btn_address_matches_iuw_no')">No</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Photo Validation -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-photo', this)">
+          <span class="section-icon">&#128247;</span>
+          <span class="section-title">5. Photo Validation</span>
+          <span id="photo-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-photo">
+          <div class="field-group">
+            <div class="field-label">1. Is Applicant Photo uploaded?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.photo_validation.fields.photo_uploaded == True %}selected{% endif %}"
+                id="btn_photo_uploaded_yes"
+                onclick="clickYesNo('photo_uploaded', true, 'btn_photo_uploaded_yes', 'btn_photo_uploaded_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.photo_validation.fields.photo_uploaded == False %}selected{% endif %}"
+                id="btn_photo_uploaded_no"
+                onclick="clickYesNo('photo_uploaded', false, 'btn_photo_uploaded_yes', 'btn_photo_uploaded_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">2. Is the Photo clear and recognizable?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.photo_validation.fields.photo_clear == True %}selected{% endif %}"
+                id="btn_photo_clear_yes"
+                onclick="clickYesNo('photo_clear', true, 'btn_photo_clear_yes', 'btn_photo_clear_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.photo_validation.fields.photo_clear == False %}selected{% endif %}"
+                id="btn_photo_clear_no"
+                onclick="clickYesNo('photo_clear', false, 'btn_photo_clear_yes', 'btn_photo_clear_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">3. Does face match the ID document?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.photo_validation.fields.face_matches_id == True %}selected{% endif %}"
+                id="btn_face_matches_id_yes"
+                onclick="clickYesNo('face_matches_id', true, 'btn_face_matches_id_yes', 'btn_face_matches_id_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.photo_validation.fields.face_matches_id == False %}selected{% endif %}"
+                id="btn_face_matches_id_no"
+                onclick="clickYesNo('face_matches_id', false, 'btn_face_matches_id_yes', 'btn_face_matches_id_no')">No</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 6: Bank Validation -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-bank', this)">
+          <span class="section-icon">&#127981;</span>
+          <span class="section-title">6. Bank Account Validation</span>
+          <span id="bank-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-bank">
+          <div class="field-group">
+            <div class="field-label">1. Is Bank Statement uploaded?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.bank_validation.fields.bank_statement_uploaded == True %}selected{% endif %}"
+                id="btn_bank_statement_uploaded_yes"
+                onclick="clickYesNo('bank_statement_uploaded', true, 'btn_bank_statement_uploaded_yes', 'btn_bank_statement_uploaded_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.bank_validation.fields.bank_statement_uploaded == False %}selected{% endif %}"
+                id="btn_bank_statement_uploaded_no"
+                onclick="clickYesNo('bank_statement_uploaded', false, 'btn_bank_statement_uploaded_yes', 'btn_bank_statement_uploaded_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">2. Does Account No. match IUW records?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.bank_validation.fields.account_no_matches == True %}selected{% endif %}"
+                id="btn_account_no_matches_yes"
+                onclick="clickYesNo('account_no_matches', true, 'btn_account_no_matches_yes', 'btn_account_no_matches_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.bank_validation.fields.account_no_matches == False %}selected{% endif %}"
+                id="btn_account_no_matches_no"
+                onclick="clickYesNo('account_no_matches', false, 'btn_account_no_matches_yes', 'btn_account_no_matches_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">3. Does Name on statement match?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card2.sections.bank_validation.fields.name_on_statement_matches == True %}selected{% endif %}"
+                id="btn_name_on_statement_matches_yes"
+                onclick="clickYesNo('name_on_statement_matches', true, 'btn_name_on_statement_matches_yes', 'btn_name_on_statement_matches_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card2.sections.bank_validation.fields.name_on_statement_matches == False %}selected{% endif %}"
+                id="btn_name_on_statement_matches_no"
+                onclick="clickYesNo('name_on_statement_matches', false, 'btn_name_on_statement_matches_yes', 'btn_name_on_statement_matches_no')">No</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">4. Enter Account Number</div>
+            <input type="text" id="input_account_number_entered" class="text-field"
+              placeholder="Enter bank account number"
+              value="{{ state.cards.card2.sections.bank_validation.fields.account_number_entered }}"
+              oninput="updateFieldStyle(this)"
+              onchange="fillField('account_number_entered', this.value)">
+          </div>
+          <div class="field-group">
+            <div class="field-label">5. Enter IFSC Code</div>
+            <input type="text" id="input_ifsc_entered" class="text-field"
+              placeholder="e.g. HDFC0001234"
+              value="{{ state.cards.card2.sections.bank_validation.fields.ifsc_entered }}"
+              oninput="updateFieldStyle(this)"
+              onchange="fillField('ifsc_entered', this.value)">
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CARD 3: Audit 6 - Financial -->
+  <div class="card" id="card3">
+    <div class="card-header" onclick="toggleCard('card3-body', this)">
+      <span class="card-icon">&#128200;</span>
+      <span class="card-title">Card 3: Audit 6 - Financial</span>
+      <span class="card-progress">0/4 Sections</span>
+      <span class="card-chevron open">&#9660;</span>
+    </div>
+    <div class="card-body" id="card3-body">
+
+      <!-- Occupation & Industry -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-occ', this)">
+          <span class="section-icon">&#128188;</span>
+          <span class="section-title">1. Occupation &amp; Industry</span>
+          <span id="occ-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-occ">
+          <div class="field-group">
+            <div class="field-label">Occupation</div>
+            <select class="select-field" id="input_occupation" onchange="fillField('occupation', this.value)">
+              <option value="">Select Occupation</option>
+              <option {% if state.cards.card3.sections.occupation.fields.occupation == 'Salaried' %}selected{% endif %}>Salaried</option>
+              <option {% if state.cards.card3.sections.occupation.fields.occupation == 'Self Employed' %}selected{% endif %}>Self Employed</option>
+              <option {% if state.cards.card3.sections.occupation.fields.occupation == 'Business' %}selected{% endif %}>Business</option>
+              <option {% if state.cards.card3.sections.occupation.fields.occupation == 'Professional' %}selected{% endif %}>Professional</option>
+              <option {% if state.cards.card3.sections.occupation.fields.occupation == 'Retired' %}selected{% endif %}>Retired</option>
+              <option {% if state.cards.card3.sections.occupation.fields.occupation == 'Homemaker' %}selected{% endif %}>Homemaker</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Industry / Organisation Type</div>
+            <select class="select-field" id="input_industry_type" onchange="fillField('industry_type', this.value)">
+              <option value="">Select Industry</option>
+              <option {% if state.cards.card3.sections.occupation.fields.industry_type == 'Agriculture' %}selected{% endif %}>Agriculture</option>
+              <option {% if state.cards.card3.sections.occupation.fields.industry_type == 'IT/Software' %}selected{% endif %}>IT/Software</option>
+              <option {% if state.cards.card3.sections.occupation.fields.industry_type == 'Banking/Finance' %}selected{% endif %}>Banking/Finance</option>
+              <option {% if state.cards.card3.sections.occupation.fields.industry_type == 'Manufacturing' %}selected{% endif %}>Manufacturing</option>
+              <option {% if state.cards.card3.sections.occupation.fields.industry_type == 'Healthcare' %}selected{% endif %}>Healthcare</option>
+              <option {% if state.cards.card3.sections.occupation.fields.industry_type == 'Retail' %}selected{% endif %}>Retail</option>
+              <option {% if state.cards.card3.sections.occupation.fields.industry_type == 'Government' %}selected{% endif %}>Government</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Is the Industry/Occupation assessed or declared to be Hazardous?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card3.sections.occupation.fields.is_hazardous == True %}selected{% endif %}"
+                id="btn_is_hazardous_yes"
+                onclick="clickYesNo('is_hazardous', true, 'btn_is_hazardous_yes', 'btn_is_hazardous_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card3.sections.occupation.fields.is_hazardous == False %}selected{% endif %}"
+                id="btn_is_hazardous_no"
+                onclick="clickYesNo('is_hazardous', false, 'btn_is_hazardous_yes', 'btn_is_hazardous_no')">No</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Minimum Income Requirement -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-income', this)">
+          <span class="section-icon">&#8377;</span>
+          <span class="section-title">2. Minimum Income Requirement</span>
+          <span class="section-validated">Validated</span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-income">
+          <div class="info-box success">
+            &#10003; No minimum income requirement for the selected occupation and plan combination.
+          </div>
+          <div class="field-group">
+            <div class="field-label">Minimum balance :</div>
+            <input type="text" id="input_minimum_balance" class="text-field"
+              placeholder="Enter minimum balance"
+              value="{{ state.cards.card3.sections.income.fields.minimum_balance }}"
+              oninput="updateFieldStyle(this)"
+              onchange="fillField('minimum_balance', this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Education Validation -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-edu', this)">
+          <span class="section-icon">&#127979;</span>
+          <span class="section-title">3. Education Validation</span>
+          <span id="edu-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-edu">
+          <div class="field-group">
+            <div class="field-label">Education</div>
+            <select class="select-field" id="input_education_level"
+              onchange="fillField('education_level', this.value)">
+              <option value="">Select Education Level</option>
+              <option {% if state.cards.card3.sections.education.fields.education_level == 'Post Graduate' %}selected{% endif %}>Post Graduate</option>
+              <option {% if state.cards.card3.sections.education.fields.education_level == 'Graduate' %}selected{% endif %}>Graduate</option>
+              <option {% if state.cards.card3.sections.education.fields.education_level == 'HSC / 12th' %}selected{% endif %}>HSC / 12th</option>
+              <option {% if state.cards.card3.sections.education.fields.education_level == 'SSC / 10th' %}selected{% endif %}>SSC / 10th</option>
+              <option {% if state.cards.card3.sections.education.fields.education_level == 'Other' %}selected{% endif %}>Other</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nominee Validation -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection('sec-nominee', this)">
+          <span class="section-icon">&#128101;</span>
+          <span class="section-title">4. Nominee Validation</span>
+          <span id="nominee-check" class="pending-circle"></span>
+          <span class="section-chevron">&#9650;</span>
+        </div>
+        <div class="section-content" id="sec-nominee">
+          <div class="field-group">
+            <div class="field-label">Whether Nominee Details Added?</div>
+            <div class="yn-group">
+              <button class="yn-btn yes {% if state.cards.card3.sections.nominee.fields.nominee_details_added == True %}selected{% endif %}"
+                id="btn_nominee_details_added_yes"
+                onclick="clickYesNo('nominee_details_added', true, 'btn_nominee_details_added_yes', 'btn_nominee_details_added_no')">Yes</button>
+              <button class="yn-btn no {% if state.cards.card3.sections.nominee.fields.nominee_details_added == False %}selected{% endif %}"
+                id="btn_nominee_details_added_no"
+                onclick="clickYesNo('nominee_details_added', false, 'btn_nominee_details_added_yes', 'btn_nominee_details_added_no')">No</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="height:70px"></div>
+</div>
+
+<!-- Submit Decision Modal -->
+<div class="modal-overlay" id="submitModal">
+  <div class="modal">
+    <h2>&#128203; Complete &amp; Submit Checklist</h2>
+    <div class="field-group">
+      <label>UW Decision</label>
+      <select id="modal-decision">
+        <option value="Accept">Accept — Proceed to Issue</option>
+        <option value="Refer">Refer to Risk</option>
+        <option value="Reject">Reject Application</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label>Remarks / Notes</label>
+      <textarea id="modal-remarks" placeholder="Optional remarks for this decision…"></textarea>
+    </div>
+    <div id="modal-error" style="display:none;color:#c62828;font-size:12px;padding:6px 0"></div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeSubmitModal()">Cancel</button>
+      <button class="btn btn-accept" id="modal-submit-btn" onclick="submitChecklist()">Submit Decision</button>
+    </div>
+  </div>
+</div>
+
+<div class="action-bar">
+  <button class="btn btn-back" onclick="window.history.back()">&#8592; Back</button>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span id="completion-status" style="font-size:12px;color:#666">0 sections completed</span>
+    <button class="btn btn-next" id="submit-btn" onclick="openSubmitModal()">Complete &amp; Submit &#10003;</button>
+  </div>
+</div>
+
+<script>
+const APP_NO = "{{ state.application_no }}";
+
+// Toggle card body
+function toggleCard(bodyId, header) {
+  const body = document.getElementById(bodyId);
+  const chevron = header.querySelector('.card-chevron');
+  if (body.classList.contains('collapsed')) {
+    body.classList.remove('collapsed');
+    chevron.classList.add('open');
+  } else {
+    body.classList.add('collapsed');
+    chevron.classList.remove('open');
+  }
+}
+
+// Toggle section content
+function toggleSection(sectionId, header) {
+  const content = document.getElementById(sectionId);
+  if (content.classList.contains('collapsed')) {
+    content.classList.remove('collapsed');
+  } else {
+    content.classList.add('collapsed');
+  }
+}
+
+// Update field style when text is entered
+function updateFieldStyle(input) {
+  if (input.value.trim()) {
+    input.classList.add('filled');
+  } else {
+    input.classList.remove('filled');
+  }
+}
+
+// Show save indicator briefly
+function flashSaved() {
+  const ind = document.getElementById('save-indicator');
+  if (!ind) return;
+  ind.style.display = 'inline';
+  setTimeout(() => { ind.style.display = 'none'; }, 1800);
+}
+
+// Handle Yes/No button clicks
+function clickYesNo(fieldId, value, yesBtnId, noBtnId) {
+  const yesBtn = document.getElementById(yesBtnId);
+  const noBtn = document.getElementById(noBtnId);
+  yesBtn.classList.toggle('selected', value === true);
+  noBtn.classList.toggle('selected', value === false);
+
+  const activeBtn = value ? yesBtn : noBtn;
+  activeBtn.classList.add('auto-click-flash');
+  setTimeout(() => activeBtn.classList.remove('auto-click-flash'), 500);
+
+  fetch('/api/click', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({element_id: fieldId, value: value, app_no: APP_NO})
+  }).then(r => r.json()).then(data => {
+    flashSaved();
+    updateCompletionStatus(data);
+  });
+}
+
+// Fill a text field
+function fillField(fieldId, value) {
+  fetch('/api/fill', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({element_id: fieldId, value: value, app_no: APP_NO})
+  }).then(r => r.json()).then(data => {
+    flashSaved();
+    updateCompletionStatus(data);
+  });
+}
+
+// Update completion status display
+function updateCompletionStatus(data) {
+  if (!data || data.status !== 'ok') return;
+  const statusEl = document.getElementById('completion-status');
+  if (statusEl) {
+    const selectedYN = new Set();
+    document.querySelectorAll('.yn-btn.selected').forEach(btn => {
+      const group = btn.closest('.field-group');
+      if (group) selectedYN.add(group);
+    });
+    statusEl.textContent = selectedYN.size + ' questions answered';
+  }
+}
+
+// Check nationality section completion
+function checkNationalityComplete() {
+  const val = document.getElementById('input_declared_residence_iuw').value;
+  const check = document.getElementById('nationality-check');
+  if (val) check.innerHTML = '<span class="complete-check">&#10003;</span>';
+}
+
+// ---- Submit Modal ----
+function openSubmitModal() {
+  document.getElementById('modal-error').style.display = 'none';
+  document.getElementById('modal-remarks').value = '';
+  document.getElementById('submitModal').classList.add('open');
+}
+
+function closeSubmitModal() {
+  document.getElementById('submitModal').classList.remove('open');
+}
+
+// Update the decision button colour to match selection
+document.addEventListener('DOMContentLoaded', function() {
+  const sel = document.getElementById('modal-decision');
+  const btn = document.getElementById('modal-submit-btn');
+  if (sel && btn) {
+    sel.addEventListener('change', function() {
+      btn.className = 'btn ' + ({'Accept':'btn-accept','Refer':'btn-refer','Reject':'btn-reject'}[this.value] || 'btn-accept');
+    });
+  }
+});
+
+function submitChecklist() {
+  const decision = document.getElementById('modal-decision').value;
+  const remarks  = document.getElementById('modal-remarks').value;
+  const errEl    = document.getElementById('modal-error');
+  const submitBtn = document.getElementById('modal-submit-btn');
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Submitting…';
+  errEl.style.display = 'none';
+
+  fetch('/api/submit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({app_no: APP_NO, uw_decision: decision, uw_remarks: remarks, performed_by: 'UW_AGENT_01'})
+  })
+  .then(r => r.json().then(data => ({ok: r.ok, status: r.status, data})))
+  .then(({ok, status, data}) => {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Decision';
+
+    if (!ok) {
+      errEl.textContent = data.message || 'Submission failed. Please complete all sections.';
+      if (data.incomplete_sections && data.incomplete_sections.length) {
+        errEl.textContent += ' Pending: ' + data.incomplete_sections.join(', ');
+      }
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // Success — close modal, show banner, update badge
+    closeSubmitModal();
+    const banner = document.getElementById('result-banner');
+    const clsMap = {Completed:'result-accepted', 'Referred to Risk':'result-referred', Rejected:'result-rejected'};
+    banner.className = 'result-banner ' + (clsMap[data.new_case_status] || 'result-accepted');
+    banner.innerHTML = '&#10003; ' + data.message;
+    banner.style.display = 'block';
+
+    // Update overall status badge
+    const badge = document.getElementById('overall-status');
+    if (badge) {
+      badge.textContent = data.new_case_status;
+      badge.className = 'status-badge status-' + data.new_case_status.toLowerCase().replace(/ /g,'-');
+    }
+
+    // Disable submit button after success
+    const submitMain = document.getElementById('submit-btn');
+    if (submitMain) { submitMain.disabled = true; submitMain.textContent = '&#10003; Submitted'; }
+  })
+  .catch(err => {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Decision';
+    errEl.textContent = 'Network error: ' + err.message;
+    errEl.style.display = 'block';
+  });
+}
+
+// Initialize field styles on page load
+document.querySelectorAll('.text-field').forEach(f => updateFieldStyle(f));
+
+// Auto-expand all sections for demo
+document.querySelectorAll('.section-content').forEach(s => s.classList.remove('collapsed'));
+</script>
+</body>
+</html>

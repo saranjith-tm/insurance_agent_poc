@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Audit Trail - {{ data.app_no }}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 12px; background: #f0f0f0; }
+  .topbar { background: #1a1a2e; color: white; padding: 4px 10px; display: flex; align-items: center; gap: 10px; }
+  .topbar .logo { color: #ff6b35; font-weight: bold; font-size: 14px; }
+  .toolbar { background: #e8e8e8; border-bottom: 1px solid #ccc; padding: 4px 10px; display: flex; gap: 6px; }
+  .toolbar a, .toolbar button { padding: 3px 10px; font-size: 11px; border: 1px solid #999; background: #fff; cursor: pointer; text-decoration: none; color: #333; border-radius: 2px; }
+  .toolbar a:hover, .toolbar button:hover { background: #d0e4f5; }
+  .main { padding: 10px; }
+  .card { background: white; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 12px; }
+  .card-header { background: #2c3e50; color: white; padding: 6px 12px; font-size: 12px; font-weight: bold; border-radius: 3px 3px 0 0; }
+  .card-body { padding: 10px 12px; }
+  .info-row { display: flex; gap: 8px; margin-bottom: 5px; font-size: 11px; }
+  .info-label { color: #777; min-width: 130px; }
+  .info-val { font-weight: bold; }
+  .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; }
+  .badge-Pending { background: #fef3e2; color: #e67e22; }
+  .badge-In\ Progress { background: #e8f4fd; color: #2980b9; }
+  .badge-Completed { background: #eafaf1; color: #27ae60; }
+  .badge-Referred\ to\ Risk { background: #f5eef8; color: #8e44ad; }
+  .badge-Rejected { background: #fde8e8; color: #c0392b; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead tr { background: #34495e; color: white; }
+  thead th { padding: 5px 8px; text-align: left; }
+  tbody tr:nth-child(even) { background: #f8f9fa; }
+  tbody td { padding: 4px 8px; border-bottom: 1px solid #eee; }
+  .action-status { color: #3498db; font-weight: bold; }
+  .action-complete { color: #27ae60; font-weight: bold; }
+  .action-field { color: #7f8c8d; }
+  .sub-completed { background: #eafaf1; }
+  .sub-inprogress { background: #e8f4fd; }
+  .footer { background: #333; color: #aaa; padding: 4px 10px; font-size: 10px; text-align: center; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="logo">ICICI PRUDENTIAL</span>
+  <span style="color:#aaa;font-size:11px">Audit Trail</span>
+</div>
+<div class="toolbar">
+  <a href="/">&#8592; Queue</a>
+  <a href="/case/{{ data.app_no }}/single">&#128203; Case View</a>
+  <a href="/case/{{ data.app_no }}/docs">&#128196; Documents</a>
+</div>
+<div class="main">
+
+  <!-- Case Summary -->
+  <div class="card">
+    <div class="card-header">&#128203; Case Summary — {{ data.app_no }}</div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <div class="info-row"><span class="info-label">Applicant</span><span class="info-val">{{ data.name }}</span></div>
+        <div class="info-row"><span class="info-label">Current Status</span>
+          <span class="status-badge badge-{{ data.status }}">{{ data.status }}</span>
+        </div>
+        <div class="info-row"><span class="info-label">UW Decision</span>
+          <span class="info-val">{{ data.uw_decision or '—' }}</span>
+        </div>
+        <div class="info-row"><span class="info-label">Product</span><span class="info-val">{{ data.product_code }}</span></div>
+        <div class="info-row"><span class="info-label">Sum Assured</span><span class="info-val">₹{{ "{:,.0f}".format(data.sum_assured) }}</span></div>
+        <div class="info-row"><span class="info-label">Last Updated</span><span class="info-val">{{ data.updated_at }}</span></div>
+        {% if data.uw_remarks %}
+        <div class="info-row" style="grid-column:1/4">
+          <span class="info-label">UW Remarks</span>
+          <span class="info-val" style="color:#7f8c8d;font-style:italic">{{ data.uw_remarks }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Submission History -->
+  <div class="card">
+    <div class="card-header">&#128203; Underwriting Submission History</div>
+    <div class="card-body">
+      {% if submission_history %}
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Submission ID</th>
+            <th>Status</th>
+            <th>Processed By</th>
+            <th>Started At</th>
+            <th>Completed At</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sub in submission_history %}
+          <tr class="sub-{{ sub.submission_status|lower|replace(' ','') }}">
+            <td>{{ loop.index }}</td>
+            <td>SUB-{{ "%05d"|format(sub.id) }}</td>
+            <td>
+              <span class="status-badge badge-{{ sub.submission_status }}">{{ sub.submission_status }}</span>
+            </td>
+            <td>{{ sub.processed_by }}</td>
+            <td>{{ sub.started_at }}</td>
+            <td>{{ sub.completed_at or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:#aaa;font-style:italic;padding:10px 0">No submissions yet for this application.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Audit Log -->
+  <div class="card">
+    <div class="card-header">&#128221; Audit Log ({{ audit_log|length }} entries)</div>
+    <div class="card-body">
+      {% if audit_log %}
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Action</th>
+            <th>Field</th>
+            <th>Old Value</th>
+            <th>New Value</th>
+            <th>Performed By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in audit_log %}
+          <tr>
+            <td style="font-family:monospace;font-size:10px">{{ entry.timestamp }}</td>
+            <td>
+              {% if entry.action == 'status_change' %}
+                <span class="action-status">&#8594; Status Change</span>
+              {% elif entry.action == 'checklist_complete' %}
+                <span class="action-complete">&#10003; Checklist Complete</span>
+              {% else %}
+                <span class="action-field">&#9998; Field Update</span>
+              {% endif %}
+            </td>
+            <td>{{ entry.field_name or '—' }}</td>
+            <td style="color:#e74c3c">{{ entry.old_value or '—' }}</td>
+            <td style="color:#27ae60;font-weight:bold">{{ entry.new_value or '—' }}</td>
+            <td>{{ entry.performed_by }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:#aaa;font-style:italic;padding:10px 0">No audit entries yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+<div class="footer">ICICI Prudential Life Insurance &copy; 2024 | Underwriting Portal v3.2.1</div>
+</body>
+</html>

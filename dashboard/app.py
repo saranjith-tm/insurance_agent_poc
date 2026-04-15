@@ -1,0 +1,387 @@
+"""
+Streamlit Orchestration Dashboard for the Insurance Underwriting POC.
+"""
+
+import sys
+import os
+import time
+import base64
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import streamlit as st
+from config import (
+    VLM_MODELS,
+    SALES_AGENT_URL,
+    UNDERWRITING_URL,
+    DEFAULT_OPENROUTER_KEY,
+    APPLICANT_DATA,
+)
+
+from crud import (
+    get_state,
+    start_automation,
+    stop_automation,
+    reset_automation,
+    fetch_checklist_status,
+)
+from service import render_log, calculate_step_visual, construct_actions_dataframe
+from ui_components import (
+    get_custom_css,
+    get_header_html,
+    get_placeholder_cam_html,
+    get_placeholder_screenshots_sales,
+    get_placeholder_screenshots_uw,
+    get_architecture_diagram,
+    get_architecture_desc,
+)
+from constants import STEPS, DUMMY_LOG
+
+st.set_page_config(
+    page_title="Underwriting Automation POC",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown(get_custom_css(), unsafe_allow_html=True)
+
+if "automation_state" not in st.session_state:
+    st.session_state.automation_state = None
+if "automation_thread" not in st.session_state:
+    st.session_state.automation_thread = None
+if "last_log_count" not in st.session_state:
+    st.session_state.last_log_count = 0
+
+st.markdown(get_header_html(), unsafe_allow_html=True)
+
+with st.sidebar:
+    st.markdown("### ⚙️ Configuration")
+
+    st.markdown("**VLM Model**")
+    selected_model_name = st.selectbox(
+        "Select Model", options=list(VLM_MODELS.keys()), index=0
+    )
+    model_config = VLM_MODELS[selected_model_name]
+
+    st.markdown(f"Provider: `{model_config['provider']}`")
+    st.markdown(f"Model ID: `{model_config['model_id']}`")
+    st.divider()
+
+    st.markdown("**API Keys**")
+    provider = model_config["provider"]
+    if provider == "openrouter":
+        api_key = st.text_input(
+            "OpenRouter API Key", value=DEFAULT_OPENROUTER_KEY, type="password"
+        )
+    elif provider == "anthropic":
+        api_key = st.text_input("Anthropic API Key", type="password")
+    elif provider == "openai":
+        api_key = st.text_input("OpenAI API Key", type="password")
+    elif provider == "google":
+        api_key = st.text_input("Google AI API Key", type="password")
+    else:
+        api_key = st.text_input("API Key", type="password")
+    st.divider()
+
+    st.markdown("**Automation Settings**")
+    use_visual_mode = st.toggle("🤖 VLM Visual Mode", value=True)
+    step_delay = st.slider(
+        "Step Delay (seconds)", min_value=0.5, max_value=5.0, value=1.5, step=0.5
+    )
+    app_no = st.text_input("Application Number", value="OS121345678")
+    st.divider()
+
+    st.markdown("**🎥 Browser & Recording**")
+    headed_mode = st.toggle("👁 Show Browser Window", value=False)
+    record_video = st.toggle("🎬 Record Session Video", value=False)
+    st.divider()
+
+    st.markdown("**🔗 Application Links**")
+    st.markdown(f"[📋 Sales Agent App]({SALES_AGENT_URL}) (port 5001)")
+    st.markdown(f"[✅ Underwriting App]({UNDERWRITING_URL}) (port 5002)")
+    st.divider()
+
+    st.markdown("**👤 Demo Applicant**")
+    st.markdown(f"**Name:** {APPLICANT_DATA['name']}")
+    st.markdown(f"**PAN:** `{APPLICANT_DATA['pan_no']}`")
+    st.markdown(f"**Aadhaar:** `{APPLICANT_DATA['aadhaar_no']}`")
+    st.markdown(f"**Occupation:** {APPLICANT_DATA['occupation']}")
+    st.markdown(f"**Sum Assured:** ₹{APPLICANT_DATA['sum_assured']:,.0f}")
+
+state = get_state()
+
+col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
+
+with col_s1:
+    if state.running:
+        st.markdown(
+            "**Status:** <span class='status-running'>🔄 Running</span>",
+            unsafe_allow_html=True,
+        )
+    elif state.completed:
+        st.markdown(
+            "**Status:** <span class='status-completed'>✅ Completed</span>",
+            unsafe_allow_html=True,
+        )
+    elif state.error:
+        st.markdown(
+            "**Status:** <span class='status-error'>❌ Error</span>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "**Status:** <span class='status-idle'>⏸ Idle</span>",
+            unsafe_allow_html=True,
+        )
+
+with col_s2:
+    st.markdown(f"**Progress:** {state.progress * 100:.0f}%")
+
+with col_s3:
+    st.markdown(f"**Actions:** {len(state.actions_taken)}")
+
+with col_s4:
+    st.markdown(f"**Screenshots:** {len(state.screenshots)}")
+
+with col_s5:
+    if state.start_time and state.end_time:
+        elapsed = (state.end_time - state.start_time).total_seconds()
+        st.markdown(f"**Time:** {elapsed:.1f}s")
+    elif state.start_time:
+        from datetime import datetime
+
+        elapsed = (datetime.now() - state.start_time).total_seconds()
+        st.markdown(f"**Time:** {elapsed:.1f}s")
+    else:
+        st.markdown("**Time:** -")
+
+st.progress(state.progress)
+
+col_btn1, col_btn2, col_btn3, col_btn4 = st.columns([2, 2, 2, 4])
+
+with col_btn1:
+    start_disabled = state.running or not api_key
+    if st.button(
+        "▶ Start Automation",
+        type="primary",
+        disabled=start_disabled,
+        use_container_width=True,
+    ):
+        with st.spinner("Starting automation agent..."):
+            start_automation(
+                SALES_AGENT_URL,
+                UNDERWRITING_URL,
+                model_config,
+                api_key,
+                use_visual_mode,
+                step_delay,
+                app_no,
+                headed=headed_mode,
+                record_video=record_video,
+            )
+        st.rerun()
+
+with col_btn2:
+    if st.button("⏹ Stop", disabled=not state.running, use_container_width=True):
+        stop_automation()
+        st.rerun()
+
+with col_btn3:
+    if st.button("🔄 Reset", disabled=state.running, use_container_width=True):
+        reset_automation(UNDERWRITING_URL)
+        st.rerun()
+
+with col_btn4:
+    pass # Status now handled below in the Live Log section
+
+st.markdown("---")
+
+# NEW: Live Execution Monitor
+if state.running or state.completed or state.log_entries:
+    st.markdown("#### ⚡ Live Execution Monitor")
+    
+    # Status Key Row
+    s_col1, s_col2 = st.columns(2)
+    with s_col1:
+        st.markdown(f'''<div class="status-key">
+            <span class="status-key-label">🗺️ Current Step:</span>
+            <span class="status-key-value">{state.current_step if state.running else ("Complete" if state.completed else "Idle")}</span>
+        </div>''', unsafe_allow_html=True)
+    with s_col2:
+        st.markdown(f'''<div class="status-key">
+            <span class="status-key-label">📍 Active Section:</span>
+            <span class="status-key-value">{state.current_section if state.running else ("N/A")}</span>
+        </div>''', unsafe_allow_html=True)
+
+    # Line-by-line Action Log
+    if state.log_entries:
+        log_html = render_log(state.log_entries[-15:]) # Last 15 entries for "line by line" feel
+        st.markdown(f'<div class="live-log-container">{log_html}</div>', unsafe_allow_html=True)
+    else:
+        st.caption("Waiting for automation log...")
+
+st.divider()
+
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    [
+        "📊 Dashboard",
+        "🎥 Live View",
+        "📸 Screenshots",
+        "📋 Action Log",
+        "📁 Architecture",
+    ]
+)
+
+with tab1:
+    col_left, col_right = st.columns([1, 1])
+    with col_left:
+        st.markdown("#### 🔄 Automation Steps")
+        for i, (step_id, step_name) in enumerate(STEPS):
+            visual = calculate_step_visual(state.progress, i, state.running)
+            st.markdown(
+                f'<div style="background:{visual["color"]};color:{visual["text_color"]};padding:5px 10px;border-radius:5px;margin-bottom:3px;font-size:13px">'
+                f"{visual['icon']} {step_name}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    with col_right:
+        st.markdown("#### 📊 Extracted Applicant Data")
+        if state.extracted_data:
+            data = state.extracted_data
+            st.markdown(f"""
+| Field | Value |
+|-------|-------|
+| **Name** | {data.get("name", "-")} |
+| **Application No** | {data.get("application_no", "-")} |
+| **PAN Number** | `{data.get("pan_no", "-")}` |
+| **Aadhaar** | `{data.get("aadhaar_no", "-")}` |
+| **DOB** | {data.get("dob", "-")} |
+| **Gender** | {data.get("gender", "-")} |
+| **Occupation** | {data.get("occupation", "-")} |
+| **Industry** | {data.get("industry", "-")} |
+| **Education** | {data.get("education", "-")} |
+| **Annual Income** | ₹{data.get("annual_income", 0):,.0f} |
+| **Bank Account** | `{data.get("bank_account", "-")}` |
+| **IFSC** | `{data.get("ifsc", "-")}` |
+| **Nominee** | {data.get("nominee_name", "-")} ({data.get("nominee_relation", "-")}) |
+""")
+        else:
+            st.info("Applicant data will appear here once extraction is complete.")
+
+        st.markdown("#### ✅ Checklist Status")
+        cs = fetch_checklist_status(UNDERWRITING_URL)
+        if cs:
+            c2 = cs["cards"]["card2"]
+            c3 = cs["cards"]["card3"]
+            completed_count = sum(
+                1 for s in c2["sections"].values() if s.get("completed", False)
+            ) + sum(1 for s in c3["sections"].values() if s.get("completed", False))
+            st.markdown(f"**KYC + Financial sections completed:** {completed_count}/10")
+            for section_key, section in list(c2["sections"].items()) + list(
+                c3["sections"].items()
+            ):
+                icon = "✅" if section.get("completed") else "⏸"
+                color = "#e8f5e9" if section.get("completed") else "#f5f5f5"
+                st.markdown(
+                    f'<div style="background:{color};padding:3px 8px;border-radius:4px;margin:2px;font-size:12px">{icon} {section["title"]}</div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("Checklist app not yet started")
+
+with tab2:
+    st.markdown("#### 🎥 Live Browser View")
+    if state.running:
+        st.caption(
+            "The image below auto-refreshes every 2 seconds while automation is running."
+        )
+    elif state.video_path:
+        st.success(f"✅ Session recording saved: `{state.video_path}`")
+        try:
+            with open(state.video_path, "rb") as vf:
+                video_bytes = vf.read()
+            st.video(video_bytes, format="video/webm")
+            st.download_button(
+                "⬇️ Download Recording (.webm)",
+                data=video_bytes,
+                file_name="uw_automation_session.webm",
+                mime="video/webm",
+            )
+        except Exception as ve:
+            st.warning(f"Could not load video file: {ve}")
+    elif state.completed and not state.video_path:
+        st.info(
+            "No video recorded for this session. Enable **Record Session Video** in the sidebar before starting."
+        )
+    else:
+        st.info("Live view will appear here once automation starts.")
+
+    if state.latest_screenshot_b64:
+        img_bytes = base64.b64decode(state.latest_screenshot_b64)
+        st.image(img_bytes, caption="Latest browser frame", use_container_width=True)
+    elif not (state.video_path or state.completed):
+        st.markdown(get_placeholder_cam_html(), unsafe_allow_html=True)
+
+with tab3:
+    st.markdown("#### 📸 Automation Screenshots")
+    st.caption(
+        "Screenshots captured during automation showing the agent's view at each step"
+    )
+
+    if state.screenshots:
+        screenshots = state.screenshots
+        for i in range(0, len(screenshots), 2):
+            col_a, col_b = st.columns(2)
+            for j, col in enumerate([col_a, col_b]):
+                idx = i + j
+                if idx < len(screenshots):
+                    label, b64_data = screenshots[idx]
+                    with col:
+                        st.markdown(f"**{label}**")
+                        st.image(
+                            base64.b64decode(b64_data),
+                            use_container_width=True,
+                            caption=f"Step {idx + 1}: {label}",
+                        )
+    else:
+        st.info("Screenshots will appear here as the automation runs.")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown(get_placeholder_screenshots_sales(), unsafe_allow_html=True)
+        with col_b:
+            st.markdown(get_placeholder_screenshots_uw(), unsafe_allow_html=True)
+
+with tab4:
+    st.markdown("#### 📋 Automation Action Log")
+    if state.log_entries:
+        st.markdown(
+            f'<div class="log-container">{render_log(state.log_entries)}</div>',
+            unsafe_allow_html=True,
+        )
+        if state.actions_taken:
+            st.markdown("#### 🎯 Actions Taken Summary")
+            st.dataframe(
+                construct_actions_dataframe(state.actions_taken),
+                use_container_width=True,
+                hide_index=True,
+            )
+    else:
+        st.info("Action log will appear here once automation starts.")
+        st.code(DUMMY_LOG, language="text")
+
+with tab5:
+    st.markdown("#### 🏗️ System Architecture")
+    col_a, col_b = st.columns([3, 2])
+    with col_a:
+        st.markdown(get_architecture_diagram())
+    with col_b:
+        st.markdown(get_architecture_desc())
+
+if state.running:
+    time.sleep(2)
+    st.rerun()
+elif (
+    state.running is False and state.start_time and not state.completed and state.error
+):
+    pass

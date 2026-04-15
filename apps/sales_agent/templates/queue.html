@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Underwriting Queue - ICICI Prudential</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 12px; background: #f0f0f0; }
+  .topbar { background: #1a1a2e; color: white; padding: 4px 10px; display: flex; align-items: center; gap: 10px; }
+  .topbar .logo { color: #ff6b35; font-weight: bold; font-size: 14px; }
+  .topbar .nav-links { display: flex; gap: 8px; }
+  .topbar .nav-links a { color: #ccc; text-decoration: none; font-size: 11px; padding: 2px 6px; border: 1px solid #444; border-radius: 3px; }
+  .topbar .nav-links a:hover { background: #444; }
+  .toolbar { background: #e8e8e8; border-bottom: 1px solid #ccc; padding: 4px 10px; display: flex; align-items: center; gap: 6px; }
+  .toolbar button { padding: 3px 10px; font-size: 11px; border: 1px solid #999; background: #fff; cursor: pointer; border-radius: 2px; }
+  .toolbar button:hover { background: #d0e4f5; }
+  .toolbar .separator { width: 1px; height: 18px; background: #bbb; margin: 0 4px; }
+  .main { padding: 8px; }
+  .section-header { background: #4a90d9; color: white; padding: 4px 10px; font-weight: bold; font-size: 12px; border-radius: 2px 2px 0 0; display: flex; align-items: center; justify-content: space-between; }
+  .live-badge { background: #27ae60; color: white; padding: 1px 7px; border-radius: 8px; font-size: 10px; display: flex; align-items: center; gap: 4px; }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: white; animation: blink 1.4s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .filter-bar { background: #fff; border: 1px solid #ddd; padding: 6px 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .filter-bar label { font-weight: bold; font-size: 11px; }
+  .filter-bar input, .filter-bar select { padding: 2px 6px; font-size: 11px; border: 1px solid #aaa; border-radius: 2px; }
+  .filter-bar button { padding: 2px 10px; font-size: 11px; border: 1px solid #4a90d9; background: #4a90d9; color: white; cursor: pointer; border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; background: white; }
+  thead tr { background: #6ab0e8; color: white; }
+  thead th { padding: 5px 8px; text-align: left; font-size: 11px; font-weight: bold; border: 1px solid #5a9fd8; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid #e0e0e0; transition: background 0.3s; }
+  tbody tr:nth-child(even) { background: #f7f9fc; }
+  tbody tr:hover { background: #d6eaf8; cursor: pointer; }
+  tbody td { padding: 4px 8px; font-size: 11px; border: 1px solid #e0e0e0; white-space: nowrap; }
+  .status-Pending { color: #e67e22; font-weight: bold; }
+  .status-In\ Progress { color: #2980b9; font-weight: bold; }
+  .status-Completed { color: #27ae60; font-weight: bold; }
+  .status-Referred\ to\ Risk { color: #8e44ad; font-weight: bold; }
+  .status-Rejected { color: #c0392b; font-weight: bold; }
+  .audit-flag { background: #e74c3c; color: white; padding: 1px 5px; border-radius: 3px; font-size: 10px; }
+  .uw-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+  .uw-pending { background: #bbb; }
+  .uw-inprogress { background: #2980b9; animation: blink 1.4s infinite; }
+  .uw-completed { background: #27ae60; }
+  .uw-referred { background: #8e44ad; }
+  .uw-rejected { background: #c0392b; }
+  .sum { color: #333; }
+  .footer { background: #333; color: #aaa; padding: 4px 10px; font-size: 10px; text-align: center; margin-top: 10px; }
+  .pagination { display: flex; gap: 4px; align-items: center; padding: 6px; background: white; border-top: 1px solid #ddd; }
+  .pagination button { padding: 2px 8px; font-size: 11px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
+  .pagination .active { background: #4a90d9; color: white; border-color: #4a90d9; }
+  .stats-bar { display: flex; gap: 0; background: white; border: 1px solid #ddd; border-top: none; }
+  .stat-card { flex: 1; padding: 6px 12px; border-right: 1px solid #eee; text-align: center; }
+  .stat-card:last-child { border-right: none; }
+  .stat-card .val { font-size: 16px; font-weight: bold; }
+  .stat-card .lbl { font-size: 10px; color: #888; }
+  .row-updated { animation: rowFlash 1.5s ease-out; }
+  @keyframes rowFlash { 0%{background:#fffde7} 100%{background:inherit} }
+  .last-updated { font-size: 10px; color: #888; }
+  #refresh-indicator { font-size: 10px; color: #27ae60; display: none; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="logo">ICICI PRUDENTIAL</span>
+  <span style="color:#aaa;font-size:11px">Life Insurance</span>
+  <div class="nav-links">
+    <a href="#">Home</a>
+    <a href="#">New Business</a>
+    <a href="#">Reports</a>
+    <a href="#">Admin</a>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+    <span id="refresh-indicator">&#8635; Updated</span>
+    <span class="last-updated">Last refresh: <span id="last-refresh-time">--</span></span>
+    <span style="font-size:11px;color:#ccc">UW_AGENT_01</span>
+    <a href="#" style="color:#ff6b35;font-size:11px">Logout</a>
+  </div>
+</div>
+<div class="toolbar">
+  <button>&#128269; Search</button>
+  <button>&#128196; New Case</button>
+  <div class="separator"></div>
+  <button onclick="window.location.reload()">&#128260; Refresh</button>
+  <button>&#128190; Export</button>
+  <div class="separator"></div>
+  <button onclick="openSelected()">&#9654; Open Selected</button>
+  <span style="margin-left:auto;font-size:11px;color:#555">
+    Total: <strong>{{ stats.total }}</strong> &nbsp;|&nbsp;
+    Pending: <strong style="color:#e67e22">{{ stats.pending }}</strong> &nbsp;|&nbsp;
+    In Progress: <strong style="color:#2980b9">{{ stats.in_progress }}</strong> &nbsp;|&nbsp;
+    Completed: <strong style="color:#27ae60">{{ stats.completed }}</strong>
+    {% if stats.referred %}&nbsp;|&nbsp; Referred: <strong style="color:#8e44ad">{{ stats.referred }}</strong>{% endif %}
+  </span>
+</div>
+<div class="main">
+  <div class="section-header">
+    <span>&#128203; CP Task List &nbsp;|&nbsp; Underwriting Queue</span>
+    <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+  </div>
+  <div class="filter-bar">
+    <label>Case Type:</label>
+    <select id="filter-case-type" onchange="applyFilter()">
+      <option value="">All</option><option>AMR</option><option>Fresh</option>
+    </select>
+    <label>Status:</label>
+    <select id="filter-status" onchange="applyFilter()">
+      <option value="">All</option>
+      <option>Pending</option><option>In Progress</option>
+      <option>Completed</option><option>Referred to Risk</option><option>Rejected</option>
+    </select>
+    <label>Product:</label>
+    <select id="filter-product" onchange="applyFilter()">
+      <option value="">All</option>
+      <option>UW3</option><option>UW8</option><option>E35</option><option>T74</option><option>E21</option>
+    </select>
+    <button onclick="clearFilters()">&#10006; Clear</button>
+  </div>
+
+  <!-- Stats bar (live counts) -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="val">{{ stats.total }}</div>
+      <div class="lbl">Total Cases</div>
+    </div>
+    <div class="stat-card">
+      <div class="val" style="color:#e67e22">{{ stats.pending }}</div>
+      <div class="lbl">Pending</div>
+    </div>
+    <div class="stat-card">
+      <div class="val" style="color:#2980b9">{{ stats.in_progress }}</div>
+      <div class="lbl">In Progress</div>
+    </div>
+    <div class="stat-card">
+      <div class="val" style="color:#27ae60">{{ stats.completed }}</div>
+      <div class="lbl">Completed</div>
+    </div>
+    <div class="stat-card">
+      <div class="val" style="color:#8e44ad">{{ stats.referred }}</div>
+      <div class="lbl">Referred</div>
+    </div>
+    <div class="stat-card">
+      <div class="val">&#8377; {{ "{:,.0f}".format(cases | sum(attribute='sum_assured') / 10000000) }}Cr</div>
+      <div class="lbl">Total SA</div>
+    </div>
+  </div>
+
+  <table id="cases-table">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="check-all" onclick="toggleAll(this)"></th>
+        <th>Application No</th>
+        <th>Applicant Name</th>
+        <th>Holding Type</th>
+        <th>SRO Division</th>
+        <th>Group Req</th>
+        <th>Case Type</th>
+        <th>Audit Flag</th>
+        <th>Sum Assured (&#8377;)</th>
+        <th>Tot Sum Assured (&#8377;)</th>
+        <th>Premium (&#8377;)</th>
+        <th>Product</th>
+        <th>UW Status</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="cases-tbody">
+      {% for case in cases %}
+      <tr id="row-{{ case.app_no }}" data-app-no="{{ case.app_no }}"
+          data-case-type="{{ case.case_type }}"
+          data-status="{{ case.status }}"
+          data-product="{{ case.product_code }}"
+          onclick="window.location='/case/{{ case.app_no }}'">
+        <td><input type="checkbox" class="row-check" data-app-no="{{ case.app_no }}" onclick="event.stopPropagation()"></td>
+        <td style="color:#1a6ea8;font-weight:bold">{{ case.app_no }}</td>
+        <td>{{ case.name }}</td>
+        <td>{{ case.holding_type }}</td>
+        <td>{{ case.sro }}</td>
+        <td></td>
+        <td>{{ case.case_type }}</td>
+        <td>{% if case.audit_flag %}<span class="audit-flag">{{ case.audit_flag }}</span>{% endif %}</td>
+        <td class="sum">{{ "{:,.0f}".format(case.sum_assured) }}</td>
+        <td class="sum">{{ "{:,.0f}".format(case.tsa) }}</td>
+        <td class="sum">{{ "{:,.0f}".format(case.premium) }}</td>
+        <td><strong>{{ case.product_code }}</strong></td>
+        <td id="status-{{ case.app_no }}">
+          {%- set s = case.status -%}
+          <span class="uw-dot uw-{{ s|lower|replace(' ', '')|replace('_','') }}"></span>
+          <span class="status-{{ s }}">{{ s }}</span>
+          {%- if case.uw_decision %} <span style="font-size:10px;color:#888">({{ case.uw_decision }})</span>{%- endif %}
+        </td>
+        <td onclick="event.stopPropagation()">
+          <a href="/case/{{ case.app_no }}" style="color:#1a6ea8;font-size:10px">Open</a>
+          &nbsp;|&nbsp;
+          <a href="/case/{{ case.app_no }}/audit" style="color:#888;font-size:10px">Audit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="pagination">
+    <button class="active">1</button>
+    <span style="margin-left:auto;font-size:11px;color:#555">Showing {{ cases|length }} records</span>
+  </div>
+</div>
+<div class="footer">
+  ICICI Prudential Life Insurance &copy; 2024 | Underwriting Portal v3.2.1 |
+  User: UW_AGENT_01 | DB: SQLite | Auto-refresh: 10s
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Live status polling
+// ---------------------------------------------------------------------------
+let knownStatuses = {};
+
+// Seed initial statuses from server-rendered data
+document.querySelectorAll('#cases-tbody tr').forEach(tr => {
+  knownStatuses[tr.dataset.appNo] = tr.dataset.status;
+});
+
+function updateStatusCell(appNo, statusData) {
+  const cell = document.getElementById('status-' + appNo);
+  if (!cell) return;
+
+  const s = statusData.status;
+  const dotClass = {
+    'Pending': 'uw-pending',
+    'In Progress': 'uw-inprogress',
+    'Completed': 'uw-completed',
+    'Referred to Risk': 'uw-referred',
+    'Rejected': 'uw-rejected',
+  }[s] || 'uw-pending';
+
+  const decision = statusData.uw_decision ? ` <span style="font-size:10px;color:#888">(${statusData.uw_decision})</span>` : '';
+  cell.innerHTML = `<span class="uw-dot ${dotClass}"></span><span class="status-${s.replace(/ /g,'\ ')}">${s}</span>${decision}`;
+
+  // Update row data attribute for filters
+  const row = document.getElementById('row-' + appNo);
+  if (row) row.dataset.status = s;
+}
+
+function pollStatuses() {
+  fetch('/api/cases/statuses')
+    .then(r => r.json())
+    .then(data => {
+      let changed = false;
+      Object.entries(data).forEach(([appNo, statusData]) => {
+        const current = knownStatuses[appNo];
+        if (current !== undefined && current !== statusData.status) {
+          updateStatusCell(appNo, statusData);
+          // Flash the row
+          const row = document.getElementById('row-' + appNo);
+          if (row) {
+            row.classList.remove('row-updated');
+            void row.offsetWidth; // reflow
+            row.classList.add('row-updated');
+          }
+          knownStatuses[appNo] = statusData.status;
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        const ind = document.getElementById('refresh-indicator');
+        ind.style.display = 'inline';
+        setTimeout(() => ind.style.display = 'none', 2000);
+      }
+
+      document.getElementById('last-refresh-time').textContent =
+        new Date().toLocaleTimeString();
+    })
+    .catch(() => {}); // Silently ignore network errors
+}
+
+// Poll every 8 seconds
+setInterval(pollStatuses, 8000);
+document.getElementById('last-refresh-time').textContent = new Date().toLocaleTimeString();
+
+
+// ---------------------------------------------------------------------------
+// Filter logic (client-side, no page reload)
+// ---------------------------------------------------------------------------
+function applyFilter() {
+  const caseType = document.getElementById('filter-case-type').value;
+  const status   = document.getElementById('filter-status').value;
+  const product  = document.getElementById('filter-product').value;
+
+  document.querySelectorAll('#cases-tbody tr').forEach(tr => {
+    const show = (!caseType || tr.dataset.caseType === caseType)
+              && (!status   || tr.dataset.status   === status)
+              && (!product  || tr.dataset.product  === product);
+    tr.style.display = show ? '' : 'none';
+  });
+}
+
+function clearFilters() {
+  document.getElementById('filter-case-type').value = '';
+  document.getElementById('filter-status').value = '';
+  document.getElementById('filter-product').value = '';
+  document.querySelectorAll('#cases-tbody tr').forEach(tr => tr.style.display = '');
+}
+
+
+// ---------------------------------------------------------------------------
+// Checkbox helpers
+// ---------------------------------------------------------------------------
+function toggleAll(master) {
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = master.checked);
+}
+
+function openSelected() {
+  const checked = document.querySelectorAll('.row-check:checked');
+  if (checked.length === 1) {
+    window.location = '/case/' + checked[0].dataset.appNo;
+  } else if (checked.length > 1) {
+    alert('Please select a single case to open.');
+  } else {
+    alert('No case selected. Please check a row first.');
+  }
+}
+</script>
+</body>
+</html>

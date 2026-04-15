@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Case {{ data.app_no }} - ICICI Prudential</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 12px; background: #f0f0f0; }
+  .topbar { background: #1a1a2e; color: white; padding: 4px 10px; display: flex; align-items: center; gap: 10px; }
+  .topbar .logo { color: #ff6b35; font-weight: bold; font-size: 14px; }
+  .toolbar { background: #e8e8e8; border-bottom: 1px solid #ccc; padding: 4px 10px; display: flex; align-items: center; gap: 6px; }
+  .toolbar a, .toolbar button { padding: 3px 10px; font-size: 11px; border: 1px solid #999; background: #fff; cursor: pointer; border-radius: 2px; text-decoration: none; color: #333; }
+  .toolbar a:hover, .toolbar button:hover { background: #d0e4f5; }
+  .case-header { background: #2c3e50; color: white; padding: 5px 10px; display: flex; align-items: center; gap: 20px; }
+  .case-header .app-no { font-weight: bold; font-size: 13px; color: #74b9ff; }
+  .case-header .case-info { font-size: 11px; color: #ccc; }
+  .tabs { display: flex; background: #ecf0f1; border-bottom: 2px solid #3498db; padding: 0 8px; overflow-x: auto; }
+  .tab { padding: 6px 12px; font-size: 11px; cursor: pointer; border: 1px solid #ddd; border-bottom: none; background: #ecf0f1; margin-right: 2px; margin-top: 4px; border-radius: 3px 3px 0 0; white-space: nowrap; }
+  .tab.active { background: white; border-top: 2px solid #3498db; font-weight: bold; color: #2980b9; }
+  .tab:hover { background: #d6eaf8; }
+  .content { background: white; border: 1px solid #ddd; margin: 0; }
+  .section-title { background: linear-gradient(to right, #2c3e50, #34495e); color: white; padding: 5px 10px; font-size: 12px; font-weight: bold; margin: 8px 0 0 0; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 6px 10px; }
+  .form-row { display: flex; align-items: center; padding: 3px 5px; border-bottom: 1px solid #f0f0f0; }
+  .form-row label { min-width: 170px; font-size: 11px; color: #555; font-weight: bold; }
+  .form-row .required { color: red; }
+  .form-row input, .form-row select { flex: 1; padding: 3px 6px; font-size: 11px; border: 1px solid #c0c0c0; background: #fafafa; border-radius: 2px; }
+  .form-row input:focus, .form-row select:focus { outline: 1px solid #3498db; background: #fff; }
+  .form-row .value-display { flex: 1; padding: 3px 6px; font-size: 11px; color: #2c3e50; font-weight: normal; }
+  .kyc-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; }
+  .kyc-ok { background: #d5f5e3; color: #27ae60; }
+  .kyc-pending { background: #fef9e7; color: #e67e22; }
+  .kyc-fail { background: #fde8e8; color: #e74c3c; }
+  .doc-thumb { width: 80px; height: 100px; border: 2px solid #ddd; border-radius: 4px; object-fit: cover; cursor: pointer; }
+  .doc-thumb:hover { border-color: #3498db; }
+  .doc-list { display: flex; gap: 10px; padding: 10px; flex-wrap: wrap; }
+  .doc-item { text-align: center; }
+  .doc-item span { display: block; font-size: 10px; color: #555; margin-top: 3px; }
+  .footer-actions { padding: 8px 10px; display: flex; gap: 8px; justify-content: flex-end; background: #f5f5f5; border-top: 1px solid #ddd; }
+  .footer-actions button { padding: 5px 15px; font-size: 12px; border-radius: 3px; cursor: pointer; }
+  .btn-primary { background: #3498db; color: white; border: 1px solid #2980b9; }
+  .btn-secondary { background: #95a5a6; color: white; border: 1px solid #7f8c8d; }
+  .btn-danger { background: #e74c3c; color: white; border: 1px solid #c0392b; }
+  .status-bar { background: #eaf4fb; border: 1px solid #aed6f1; padding: 4px 10px; font-size: 11px; color: #2471a3; }
+  .inline-flag { background: #fdecea; border-left: 3px solid #e74c3c; padding: 4px 8px; font-size: 11px; color: #c0392b; margin: 4px 10px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="logo">ICICI PRUDENTIAL</span>
+  <span style="color:#aaa;font-size:11px">Life Insurance - Underwriting Portal</span>
+  <div style="margin-left:auto;font-size:11px;color:#ccc">UW_AGENT_01 | Session Active</div>
+</div>
+<div class="toolbar">
+  <a href="/">&#8592; Task List</a>
+  <button>Decision Screen</button>
+  <button>Refer to CW</button>
+  <button>View Documents</button>
+  <button>View Risk Report</button>
+  <button>View Comments</button>
+  <button>Refer to Risk</button>
+  <button style="background:#e8f4f8;color:#1a6ea8;font-weight:bold">MARS Screen</button>
+</div>
+<div class="case-header">
+  <span>&#128203; Online Case Details</span>
+  <span class="app-no">Application No: {{ data.app_no }}</span>
+  <span class="case-info">Product: {{ data.product_code }} | Plan: {{ data.plan }}</span>
+  <span class="case-info">Sum Assured: &#8377; {{ "{:,.0f}".format(data.sum_assured) }}</span>
+  <span class="case-info">Status:
+    {%- set s = data.status -%}
+    {%- set color = {'Pending':'#f39c12','In Progress':'#74b9ff','Completed':'#2ecc71','Referred to Risk':'#bb8fce','Rejected':'#e74c3c'}.get(s, '#f39c12') -%}
+    <span id="live-case-status" style="color:{{ color }};font-weight:bold">{{ s }}</span>
+    {% if data.uw_decision %}<span style="color:#aaa;font-size:10px">({{ data.uw_decision }})</span>{% endif %}
+  </span>
+  <span style="margin-left:auto;display:flex;gap:10px;align-items:center">
+    <a href="/case/{{ data.app_no }}/audit" style="color:#aaa;font-size:11px">&#128221; Audit Trail</a>
+    <a href="/case/{{ data.app_no }}/docs" style="color:#74b9ff;font-size:11px">&#128196; View All Docs</a>
+  </span>
+</div>
+<div class="tabs">
+  <div class="tab {% if active_tab == 'lookup' %}active{% endif %}" onclick="window.location='/case/{{ data.app_no }}/lookup'">Lookup and Dedup</div>
+  <div class="tab {% if active_tab == 'single' %}active{% endif %}" onclick="window.location='/case/{{ data.app_no }}/single'">Single Screen</div>
+  <div class="tab" onclick="">Sourcing and Demographics</div>
+  <div class="tab" onclick="">Family and Medicals</div>
+  <div class="tab" onclick="">Product Details</div>
+  <div class="tab" onclick="">Application Details</div>
+  <div class="tab" onclick="">KYC Docs</div>
+  <div class="tab" onclick="">Discrepancy Editor</div>
+  <div class="tab" onclick="">Decision Editor</div>
+  <div class="tab" onclick="">Derived Items</div>
+  <div class="tab" onclick="">Printout</div>
+</div>
+
+<div class="content">
+  {% if active_tab == 'single' %}
+  <div class="status-bar">&#9432; Personal Demographics - Proposed Life Assured | Last updated: 27-12-2024 14:35</div>
+
+  <div class="section-title">Personal Demographics</div>
+  <div class="form-grid">
+    <div>
+      <div class="form-row">
+        <label><span class="required">*</span> First Name</label>
+        <input type="text" value="{{ data.first_name }}" id="field_first_name">
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Address 1</label>
+        <input type="text" value="{{ data.address1 }}" id="field_address1">
+      </div>
+      <div class="form-row">
+        <label>Address 3</label>
+        <input type="text" value="" id="field_address3">
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> State</label>
+        <select id="field_state">
+          <option {% if data.state == 'Tamil Nadu' %}selected{% endif %}>Tamil Nadu</option>
+          <option>Karnataka</option><option>Maharashtra</option><option>Telangana</option>
+          <option>Delhi</option><option>Uttar Pradesh</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Marital Status</label>
+        <select id="field_marital"><option selected>Single</option><option>Married</option><option>Divorced</option></select>
+      </div>
+      <div class="form-row">
+        <label>Gender Referred Docs</label>
+        <select><option>--Select--</option><option>PAN Card</option><option>Aadhaar</option></select>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Resident Status</label>
+        <select id="field_resident"><option>NRI</option><option>Resident</option><option>PIO</option></select>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Organisation Type</label>
+        <select id="field_org_type">
+          <option>PRIVATE LTD</option><option>PUBLIC LTD</option><option>GOVT</option><option>SELF EMPLOYED</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Annual Income</label>
+        <input type="text" value="{{ data.annual_income }}" id="field_annual_income">
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Profession</label>
+        <select id="field_profession"><option>SPYI</option><option>SOFTWARE ENGINEER</option><option>MANAGER</option></select>
+      </div>
+    </div>
+    <div>
+      <div class="form-row">
+        <label><span class="required">*</span> Last Name</label>
+        <input type="text" value="{{ data.last_name }}" id="field_last_name">
+      </div>
+      <div class="form-row">
+        <label>Address 2</label>
+        <input type="text" value="{{ data.address2 }}" id="field_address2">
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> City</label>
+        <input type="text" value="{{ data.city }}" id="field_city">
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Residing Country</label>
+        <select id="field_country"><option>Sweden</option><option>India</option><option>USA</option><option>UK</option></select>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Gender</label>
+        <select id="field_gender"><option>Male</option><option>Female</option><option>Other</option></select>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Nationality</label>
+        <select id="field_nationality"><option>Indian</option><option>Foreign</option></select>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Qualification</label>
+        <select id="field_qual"><option>GRAD</option><option>POST GRAD</option><option>HSC</option><option>SSC</option></select>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> High Risk Category</label>
+        <select id="field_high_risk"><option>No</option><option>Yes</option></select>
+      </div>
+      <div class="form-row">
+        <label>Experian Income</label>
+        <input type="text" value="{{ data.experian_income }}" id="field_experian_income">
+      </div>
+      <div class="form-row">
+        <label>Are you Politically Exposed</label>
+        <select id="field_pep"><option>No</option><option>Yes</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Identity Documents</div>
+  <div class="form-grid">
+    <div>
+      <div class="form-row">
+        <label><span class="required">*</span> PAN Number</label>
+        <input type="text" value="{{ data.pan_no }}" id="field_pan" style="font-family:monospace;letter-spacing:1px">
+        <span class="kyc-badge kyc-ok">&#10003; Verified</span>
+      </div>
+      <div class="form-row">
+        <label><span class="required">*</span> Aadhaar Number</label>
+        <input type="text" value="{{ data.aadhaar_no }}" id="field_aadhaar" style="font-family:monospace;letter-spacing:1px">
+        <span class="kyc-badge kyc-ok">&#10003; Verified</span>
+      </div>
+    </div>
+    <div>
+      <div class="form-row">
+        <label>Mobile</label>
+        <input type="text" value="{{ data.mobile }}" id="field_mobile">
+      </div>
+      <div class="form-row">
+        <label>Email</label>
+        <input type="text" value="{{ data.email }}" id="field_email">
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Financial Details</div>
+  <div class="form-grid">
+    <div>
+      <div class="form-row">
+        <label>Bank Name</label>
+        <input type="text" value="{{ data.bank_name }}" id="field_bank_name">
+      </div>
+      <div class="form-row">
+        <label>Account Number</label>
+        <input type="text" value="{{ data.bank_account }}" id="field_bank_account" style="font-family:monospace">
+      </div>
+    </div>
+    <div>
+      <div class="form-row">
+        <label>IFSC Code</label>
+        <input type="text" value="{{ data.ifsc }}" id="field_ifsc" style="font-family:monospace">
+      </div>
+      <div class="form-row">
+        <label>Date of Birth</label>
+        <input type="text" value="{{ data.dob }}" id="field_dob">
+      </div>
+    </div>
+  </div>
+
+  {% elif active_tab == 'lookup' %}
+  <div class="status-bar">&#9432; Lookup and Dedup Screen | Dedup Source: POSDEX</div>
+  <div class="section-title">Proposer/Life Assured Details</div>
+  <div class="form-grid">
+    <div>
+      <div class="form-row"><label>Salutation</label><select><option>Mr</option><option selected>Mrs</option><option>Ms</option></select></div>
+      <div class="form-row"><label>First Name</label><input type="text" value="{{ data.first_name }}"></div>
+      <div class="form-row"><label>Date Of Birth</label><input type="text" value="{{ data.dob }}"></div>
+      <div class="form-row"><label>OCR Birthdate</label><input type="text" value=""></div>
+      <div class="form-row"><label>Address Line 2</label><input type="text" value="COLONY GAJULA RAMARAM"></div>
+      <div class="form-row"><label>Landmark</label><input type="text" value=""></div>
+      <div class="form-row"><label>State</label><select><option>Tamil Nadu</option><option selected>Telangana</option></select></div>
+      <div class="form-row"><label>Pincode Referred Docs</label><select><option>--Select--</option></select></div>
+      <div class="form-row"><label>STONO</label><input type="text" value=""></div>
+      <div class="form-row"><label>Gender</label><select><option>Male</option><option selected>Female</option></select></div>
+      <div class="form-row"><label>EmailID</label><input type="text" value="{{ data.email }}"></div>
+      <div class="form-row"><label>Dedup Initial Source</label><input type="text" value="POSDEX" readonly style="background:#eee"></div>
+    </div>
+    <div>
+      <div class="form-row"><label>Advisor Code</label><input type="text" value="{{ data.advisor_code }}" readonly style="background:#eee"></div>
+      <div class="form-row"><label>Last Name</label><input type="text" value="{{ data.last_name }}"></div>
+      <div class="form-row"><label>DOB Referred Docs</label><select><option>--Select--</option><option>PAN Card</option><option>Aadhaar</option></select></div>
+      <div class="form-row"><label>Address Line 1</label><input type="text" value="PLOTNO425 420/1ATINO 201 IML"></div>
+      <div class="form-row"><label>Address Line 3</label><input type="text" value="GUTHBULLALPURI MANUAL"></div>
+      <div class="form-row"><label>City</label><input type="text" value="{{ data.city }}"></div>
+      <div class="form-row"><label>Pincode</label><input type="text" value="{{ data.pincode }}"></div>
+      <div class="form-row"><label>Mobile</label><input type="text" value="{{ data.mobile }}"></div>
+      <div class="form-row"><label>Landline no</label><input type="text" value=""></div>
+      <div class="form-row"><label>Gender Referred Docs</label><select><option>--Select--</option></select></div>
+      <div class="form-row"><label></label><button style="padding:4px 12px;background:#27ae60;color:white;border:none;cursor:pointer;border-radius:3px;font-size:11px">Proposer Dedup Grouping</button></div>
+    </div>
+  </div>
+  <div style="padding:8px 10px">
+    <button style="padding:5px 15px;background:#27ae60;color:white;border:none;cursor:pointer;border-radius:3px;font-weight:bold">Posicheck Dedup</button>
+  </div>
+  {% endif %}
+</div>
+
+<div class="footer-actions">
+  <button class="btn-secondary" onclick="window.history.back()">&#8592; Back</button>
+  <button class="btn-danger">&#9888; Refer to Risk</button>
+  <button class="btn-primary">&#128190; Save</button>
+  <button class="btn-primary" onclick="window.location='/case/{{ data.app_no }}/docs'">&#128196; View Documents &#9658;</button>
+</div>
+</body>
+</html>
