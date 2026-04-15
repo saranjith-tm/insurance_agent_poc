@@ -1,4 +1,4 @@
-# insure_agent
+# insurance_agent_poc
 
 
 # 1) python3 -m venv .venv
@@ -8,4 +8,4 @@
 # 5) run "python3 run.py"
 
 
-# insurance_agent_poc
+
