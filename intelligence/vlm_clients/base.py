@@ -172,7 +172,7 @@ class BaseVLMClient(ABC):
             return {"parsing_error": True, "raw_response": response_text}
 
 
-SYSTEM_PROMPT = """You are an intelligent underwriting automation agent for an insurance company (ICICI Prudential).
+SYSTEM_PROMPT = """You are an intelligent underwriting automation agent for an insurance company.
 Your job is to automate the manual tasks of an underwriting agent by:
 1. Extracting information from insurance application documents (PAN card, Aadhaar, bank statements, proposal forms)
 2. Filling out the underwriting checklist by clicking Yes/No buttons and entering data in text fields

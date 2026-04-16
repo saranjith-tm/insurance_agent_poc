@@ -15,6 +15,7 @@ from config import (
     SALES_AGENT_URL,
     UNDERWRITING_URL,
     DEFAULT_OPENROUTER_KEY,
+    DEFAULT_OPENAI_KEY,
     APPLICANT_DATA,
 )
 
@@ -77,7 +78,7 @@ with st.sidebar:
     elif provider == "anthropic":
         api_key = st.text_input("Anthropic API Key", type="password")
     elif provider == "openai":
-        api_key = st.text_input("OpenAI API Key", type="password")
+        api_key = st.text_input("OpenAI API Key", value=DEFAULT_OPENAI_KEY, type="password")
     elif provider == "google":
         api_key = st.text_input("Google AI API Key", type="password")
     else:

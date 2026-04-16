@@ -1,5 +1,5 @@
 """
-Sales Agent Application - ICICI Prudential underwriting frontend.
+Sales Agent Application - Mykroft Business Solutions underwriting frontend.
 All case data is persisted in SQLite. Status updates from the underwriting
 app are reflected here in real-time.
 Runs on port 5001.

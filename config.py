@@ -12,9 +12,8 @@ SALES_AGENT_URL = f"http://localhost:{SALES_AGENT_PORT}"
 UNDERWRITING_URL = f"http://localhost:{UNDERWRITING_PORT}"
 
 # Default API keys (can be overridden via dashboard or environment)
-DEFAULT_OPENROUTER_KEY = os.getenv(
-    "OPENROUTER_API_KEY", ""
-)
+DEFAULT_OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "")
+DEFAULT_OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 
 # VLM Model configurations
 VLM_MODELS = {
@@ -30,7 +29,7 @@ VLM_MODELS = {
     },
     "OpenRouter - Qwen2.5-VL-7B (Fast)": {
         "provider": "openrouter",
-        "model_id": "qwen/qwen2.5-vl-7b-instruct",
+        "model_id": "qwen/qwen-2.5-vl-7b-instruct",
         "api_base": "https://openrouter.ai/api/v1",
     },
     "OpenRouter - Pixtral 12B (Free)": {
@@ -46,6 +45,11 @@ VLM_MODELS = {
     "OpenAI - GPT-4o": {
         "provider": "openai",
         "model_id": "gpt-4o",
+        "api_base": "https://api.openai.com/v1",
+    },
+    "OpenAI - GPT-4o Mini": {
+        "provider": "openai",
+        "model_id": "gpt-4o-mini",
         "api_base": "https://api.openai.com/v1",
     },
     "Google - Gemini 1.5 Pro": {

@@ -3,6 +3,7 @@ OpenAI VLM Client - supports GPT-4o and GPT-4-vision models.
 """
 
 import json
+import time
 from .base import (
     BaseVLMClient,
     VLMAction,
@@ -26,14 +27,25 @@ class OpenAIVLMClient(BaseVLMClient):
             raise ImportError("openai package not installed. Run: pip install openai")
 
     def _call_api(self, messages: list, max_tokens: int = 1024) -> str:
-        """Make API call to OpenAI."""
-        response = self.client.chat.completions.create(
-            model=self.model_id,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.1,
-        )
-        return response.choices[0].message.content
+        """Make API call to OpenAI with retry on rate limit."""
+        from openai import RateLimitError
+
+        max_retries = 5
+        delay = 2.0
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model_id,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=0.1,
+                )
+                return response.choices[0].message.content
+            except RateLimitError as e:
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(delay)
+                delay *= 2
 
     def analyze_and_act(
         self,
