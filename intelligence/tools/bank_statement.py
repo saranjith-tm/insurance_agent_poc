@@ -70,7 +70,8 @@ def run_step_extract_min_balance(agent):
                         '{"doc_title": "text", "is_bank_statement": bool, "minimum_balance": val, "reasoning": "text"}'
                     )
 
-                    result_data = agent.vlm.analyze_document(screenshot, prompt)
+                    result_data, usage = agent.vlm.analyze_document(screenshot, prompt)
+                    agent.state.update_usage(usage.input_tokens, usage.output_tokens, usage.model_id)
                     
                     # Handle debugging if parsing failed
                     if result_data.get("parsing_error"):

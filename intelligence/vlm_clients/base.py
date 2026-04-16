@@ -10,6 +10,16 @@ from dataclasses import dataclass
 from typing import Optional
 from PIL import Image
 import io
+from typing import Tuple, Dict, Any
+
+
+@dataclass
+class VLMUsage:
+    """Token usage for a VLM call."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    model_id: str = ""
 
 
 @dataclass
@@ -76,10 +86,10 @@ class BaseVLMClient(ABC):
         context: dict,
         image_width: int,
         image_height: int,
-    ) -> VLMAction:
+    ) -> Tuple[VLMAction, VLMUsage]:
         """
         Analyze a screenshot and determine the next action to take.
-        Returns a VLMAction with coordinates and action type.
+        Returns a (VLMAction, VLMUsage) tuple.
         """
         pass
 
@@ -88,10 +98,10 @@ class BaseVLMClient(ABC):
         self,
         screenshot_bytes: bytes,
         fields_to_extract: list[str],
-    ) -> dict[str, str]:
+    ) -> Tuple[Dict[str, str], VLMUsage]:
         """
         Extract specific data fields from a document screenshot.
-        Returns a dict mapping field names to extracted values.
+        Returns a (dict, VLMUsage) tuple.
         """
         pass
 
@@ -100,10 +110,32 @@ class BaseVLMClient(ABC):
         self,
         screenshot_bytes: bytes,
         validation_prompt: str,
-    ) -> dict:
+    ) -> Tuple[Dict[str, Any], VLMUsage]:
         """
         Analyze a document for validation purposes using a custom prompt.
-        Returns a dict with validation results.
+        Returns a (dict, VLMUsage) tuple.
+        """
+        pass
+
+    @abstractmethod
+    def describe_document(self, screenshot_bytes: bytes) -> Tuple[str, VLMUsage]:
+        """
+        Get a text description of a document.
+        Returns a (text, VLMUsage) tuple.
+        """
+        pass
+
+    @abstractmethod
+    def verify_document(
+        self,
+        screenshot_bytes: bytes,
+        doc_type: str,
+        applicant_data: dict,
+        questions: dict,
+    ) -> Tuple[Dict[str, Any], VLMUsage]:
+        """
+        Verify a document screenshot.
+        Returns a (dict, VLMUsage) tuple.
         """
         pass
 

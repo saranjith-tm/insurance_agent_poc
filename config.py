@@ -59,6 +59,18 @@ VLM_MODELS = {
     },
 }
 
+# Model Pricing (Cost per 1 million tokens in USD)
+MODEL_PRICING = {
+    "qwen/qwen2.5-vl-32b-instruct": {"input": 0.20, "output": 0.60},
+    "qwen/qwen2.5-vl-72b-instruct": {"input": 0.40, "output": 1.20},
+    "qwen/qwen-2.5-vl-7b-instruct": {"input": 0.05, "output": 0.15},
+    "mistralai/pixtral-12b": {"input": 0.00, "output": 0.00},
+    "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
+    "gpt-4o": {"input": 5.00, "output": 15.00},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "gemini-1.5-pro": {"input": 3.50, "output": 10.50},
+}
+
 # Dummy applicant data
 APPLICANT_DATA = {
     "application_no": "OS121345678",

@@ -159,6 +159,37 @@ with col_s5:
 
 st.progress(state.progress)
 
+# NEW: Token Usage & Cost & Confidence Metrics
+u_col1, u_col2, u_col3, u_col4, u_col5 = st.columns(5)
+with u_col1:
+    st.markdown(f"<div class='metric-box'><b>Input Tokens:</b> {state.input_tokens:,}</div>", unsafe_allow_html=True)
+with u_col2:
+    st.markdown(f"<div class='metric-box'><b>Output Tokens:</b> {state.output_tokens:,}</div>", unsafe_allow_html=True)
+with u_col3:
+    st.markdown(f"<div class='metric-box'><b>Total Tokens:</b> {state.input_tokens + state.output_tokens:,}</div>", unsafe_allow_html=True)
+with u_col4:
+    st.markdown(f"<div class='metric-box'><b>Est. Cost:</b> <span style='color:#2e7d32;font-weight:bold'>${state.total_cost:.4f}</span></div>", unsafe_allow_html=True)
+
+conf = state.image_confidence * 100
+conf_color = "#2e7d32" if conf >= 80 else "#f9a825" if conf >= 50 else "#c62828"
+handoff_note = " (Handoff!)" if conf < 50 and state.completed else ""
+
+with u_col5:
+    st.markdown(f"<div class='metric-box'><b>Image Confidence:</b> <span style='color:{conf_color};font-weight:bold'>{conf:.1f}%{handoff_note}</span></div>", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+.metric-box {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    text-align: center;
+    font-size: 14px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 col_btn1, col_btn2, col_btn3, col_btn4 = st.columns([2, 2, 2, 4])
 
 with col_btn1:

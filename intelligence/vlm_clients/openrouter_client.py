@@ -8,12 +8,14 @@ import json
 from .base import (
     BaseVLMClient,
     VLMAction,
+    VLMUsage,
     encode_bytes_to_base64,
     SYSTEM_PROMPT,
     ACTION_PROMPT_TEMPLATE,
     EXTRACTION_PROMPT_TEMPLATE,
     DOC_VERIFICATION_PROMPT_TEMPLATE,
 )
+from typing import Tuple
 
 
 class OpenRouterClient(BaseVLMClient):
@@ -30,8 +32,8 @@ class OpenRouterClient(BaseVLMClient):
             "X-Title": "Insurance UW POC",
         }
 
-    def _call_api(self, messages: list, max_tokens: int = 1024) -> str:
-        """Make API call to OpenRouter."""
+    def _call_api(self, messages: list, max_tokens: int = 1024) -> Tuple[str, VLMUsage]:
+        """Make API call to OpenRouter and return (content, usage)."""
         payload = {
             "model": self.model_id,
             "messages": messages,
@@ -49,8 +51,13 @@ class OpenRouterClient(BaseVLMClient):
                 response.raise_for_status()
                 data = response.json()
 
+                usage = VLMUsage(model_id=self.model_id)
+                if "usage" in data:
+                    usage.input_tokens = data["usage"].get("prompt_tokens", 0)
+                    usage.output_tokens = data["usage"].get("completion_tokens", 0)
+
                 if "choices" in data and len(data["choices"]) > 0:
-                    return data["choices"][0]["message"]["content"]
+                    return data["choices"][0]["message"]["content"], usage
                 elif "error" in data:
                     raise Exception(f"API error: {data['error']}")
                 else:
@@ -69,7 +76,7 @@ class OpenRouterClient(BaseVLMClient):
         context: dict,
         image_width: int,
         image_height: int,
-    ) -> VLMAction:
+    ) -> Tuple[VLMAction, VLMUsage]:
         """Analyze screenshot and determine next action."""
         image_b64 = encode_bytes_to_base64(screenshot_bytes)
 
@@ -96,14 +103,14 @@ class OpenRouterClient(BaseVLMClient):
             },
         ]
 
-        response_text = self._call_api(messages, max_tokens=512)
-        return self._parse_action_response(response_text)
+        response_text, usage = self._call_api(messages, max_tokens=512)
+        return self._parse_action_response(response_text), usage
 
     def extract_data(
         self,
         screenshot_bytes: bytes,
         fields_to_extract: list,
-    ) -> dict:
+    ) -> Tuple[dict, VLMUsage]:
         """Extract data fields from a document screenshot."""
         image_b64 = encode_bytes_to_base64(screenshot_bytes)
 
@@ -130,14 +137,14 @@ class OpenRouterClient(BaseVLMClient):
             },
         ]
 
-        response_text = self._call_api(messages, max_tokens=1024)
-        return self._parse_extraction_response(response_text)
+        response_text, usage = self._call_api(messages, max_tokens=1024)
+        return self._parse_extraction_response(response_text), usage
 
     def analyze_document(
         self,
         screenshot_bytes: bytes,
         validation_prompt: str,
-    ) -> dict:
+    ) -> Tuple[dict, VLMUsage]:
         """Analyze a document for validation purposes using a custom prompt."""
         image_b64 = encode_bytes_to_base64(screenshot_bytes)
 
@@ -157,10 +164,10 @@ class OpenRouterClient(BaseVLMClient):
             },
         ]
 
-        response_text = self._call_api(messages, max_tokens=2048)
-        return self._parse_extraction_response(response_text)
+        response_text, usage = self._call_api(messages, max_tokens=2048)
+        return self._parse_extraction_response(response_text), usage
 
-    def describe_document(self, screenshot_bytes: bytes) -> str:
+    def describe_document(self, screenshot_bytes: bytes) -> Tuple[str, VLMUsage]:
         """Get a text description of what's in a document screenshot."""
         image_b64 = encode_bytes_to_base64(screenshot_bytes)
 
@@ -188,7 +195,7 @@ class OpenRouterClient(BaseVLMClient):
         doc_type: str,
         applicant_data: dict,
         questions: dict,
-    ) -> dict:
+    ) -> Tuple[dict, VLMUsage]:
         """
         Verify a scanned document screenshot against applicant data.
         questions: dict mapping question_id -> question text (e.g. {"is_uploaded": "Is a PAN card document visible?"})
@@ -221,5 +228,5 @@ class OpenRouterClient(BaseVLMClient):
             },
         ]
 
-        response_text = self._call_api(messages, max_tokens=1024)
-        return self._parse_extraction_response(response_text)
+        response_text, usage = self._call_api(messages, max_tokens=1024)
+        return self._parse_extraction_response(response_text), usage

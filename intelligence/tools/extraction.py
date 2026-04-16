@@ -56,7 +56,8 @@ def run_step_extract_single_screen_data(agent):
                     "ifsc",
                     "nominee_name",
                 ]
-                extracted = agent.vlm.extract_data(screenshot, fields)
+                extracted, usage = agent.vlm.extract_data(screenshot, fields)
+                agent.state.update_usage(usage.input_tokens, usage.output_tokens, usage.model_id)
                 agent._applicant_data = extracted
                 agent.state.extracted_data = extracted
                 agent.state.log(
@@ -129,7 +130,8 @@ def run_step_extract_applicant_data(agent):
                 "dob",
                 "occupation",
             ]
-            extracted = agent.vlm.extract_data(screenshot, fields)
+            extracted, usage = agent.vlm.extract_data(screenshot, fields)
+            agent.state.update_usage(usage.input_tokens, usage.output_tokens, usage.model_id)
             agent._applicant_data = extracted
             agent.state.extracted_data = extracted
             agent.state.log(f"🤖 VLM extracted: {json.dumps(extracted)[:200]}", "info")

@@ -48,6 +48,11 @@ class AutomationState:
         self.checklist_state = {}  # Current state of underwriting checklist
         self.latest_screenshot_b64 = None  # Most recent screenshot for live view
         self.video_path = None  # Path to recorded video file (WebM) after run
+        self.input_tokens = 0
+        self.output_tokens = 0
+        self.total_cost = 0.0
+        self.image_confidence = 0.0  # Overall image quality/extraction confidence
+        self.doc_confidences = [] # Individual doc confidence scores
         self.start_time = None
         self.end_time = None
         self._lock = threading.Lock()
@@ -85,3 +90,18 @@ class AutomationState:
     def set_progress(self, value: float):
         with self._lock:
             self.progress = min(1.0, max(0.0, value))
+
+    def update_usage(self, input_tokens: int, output_tokens: int, model_id: str):
+        """Update cumulative token usage and cost."""
+        from config import MODEL_PRICING
+
+        with self._lock:
+            self.input_tokens += input_tokens
+            self.output_tokens += output_tokens
+
+            # Calculate cost
+            pricing = MODEL_PRICING.get(model_id, {"input": 0, "output": 0})
+            step_cost = (input_tokens / 1_000_000 * pricing["input"]) + (
+                output_tokens / 1_000_000 * pricing["output"]
+            )
+            self.total_cost += step_cost

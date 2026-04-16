@@ -115,12 +115,14 @@ def verify_documents_with_vlm(agent):
                 "1. What type of document is this? (doc_type: e.g. 'PAN', 'Aadhaar', 'Bank Statement', 'Face Verification', 'RCR', 'Other')\n"
                 "2. Is this document valid, legible, and matches the applicant data above? (valid: boolean)\n"
                 "3. If it is a PAN or Aadhaar, does the ID number match exactly? (matches_id: boolean)\n"
-                "4. What is your reasoning? (reasoning: string)\n\n"
+                "4. Give a confidence score for the image quality and readability (0.0 to 1.0). (confidence: number)\n"
+                "5. What is your reasoning? (reasoning: string)\n\n"
                 "Return ONLY a JSON object: "
-                '{"doc_type": "text", "valid": bool, "matches_id": bool, "reasoning": "text"}'
+                '{"doc_type": "text", "valid": bool, "matches_id": bool, "confidence": float, "reasoning": "text"}'
             )
 
-            result_data = agent.vlm.analyze_document(screenshot, prompt)
+            result_data, usage = agent.vlm.analyze_document(screenshot, prompt)
+            agent.state.update_usage(usage.input_tokens, usage.output_tokens, usage.model_id)
             
             # Handle debugging if parsing failed
             if result_data.get("parsing_error"):
@@ -129,10 +131,16 @@ def verify_documents_with_vlm(agent):
 
             doc_type_found = str(result_data.get("doc_type", "Other")).upper()
             is_valid = result_data.get("valid", False)
+            confidence = result_data.get("confidence", 0.0)
             reasoning = result_data.get("reasoning", "No reasoning.")
 
-            agent.state.log(f"  📝 Detected: {doc_type_found}", "info")
+            agent.state.log(f"  📝 Detected: {doc_type_found} (Conf: {confidence:.2f})", "info")
             agent.state.log(f"  🧠 Reasoning: {reasoning}", "info")
+
+            # Update overall confidence in state
+            with agent.state._lock:
+                agent.state.doc_confidences.append(confidence)
+                agent.state.image_confidence = sum(agent.state.doc_confidences) / len(agent.state.doc_confidences)
 
             # Update master validation results
             if "PAN" in doc_type_found:
@@ -284,9 +292,10 @@ def validate_documents_with_vlm(agent):
                     )
 
                     # Use VLM to validate the document
-                    validation_result = agent.vlm.analyze_document(
+                    validation_result, usage = agent.vlm.analyze_document(
                         screenshot, config["prompt"]
                     )
+                    agent.state.update_usage(usage.input_tokens, usage.output_tokens, usage.model_id)
 
                     # Parse validation result
                     try:
@@ -310,6 +319,11 @@ def validate_documents_with_vlm(agent):
                             "issues": issues,
                             "extracted_data": extracted,
                         }
+
+                        # Update overall confidence in state
+                        with agent.state._lock:
+                            agent.state.doc_confidences.append(confidence)
+                            agent.state.image_confidence = sum(agent.state.doc_confidences) / len(agent.state.doc_confidences)
 
                         status_icon = "✅" if is_valid and confidence > 0.7 else "❌"
                         agent.state.log(
