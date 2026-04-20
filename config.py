@@ -17,9 +17,9 @@ DEFAULT_OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 
 # VLM Model configurations
 VLM_MODELS = {
-    "OpenRouter - Qwen2.5-VL-32B (Recommended)": {
+    "OpenRouter - Qwen3-VL-32B (Recommended)": {
         "provider": "openrouter",
-        "model_id": "qwen/qwen2.5-vl-32b-instruct",
+        "model_id": "qwen/qwen3-vl-32b-instruct",
         "api_base": "https://openrouter.ai/api/v1",
     },
     "OpenRouter - Qwen2.5-VL-72B": {
@@ -27,9 +27,9 @@ VLM_MODELS = {
         "model_id": "qwen/qwen2.5-vl-72b-instruct",
         "api_base": "https://openrouter.ai/api/v1",
     },
-    "OpenRouter - Qwen2.5-VL-7B (Fast)": {
+    "OpenRouter - Qwen3-VL-8B (Fast)": {
         "provider": "openrouter",
-        "model_id": "qwen/qwen-2.5-vl-7b-instruct",
+        "model_id": "qwen/qwen3-vl-8b-instruct",
         "api_base": "https://openrouter.ai/api/v1",
     },
     "OpenRouter - Pixtral 12B (Free)": {
@@ -61,9 +61,9 @@ VLM_MODELS = {
 
 # Model Pricing (Cost per 1 million tokens in USD)
 MODEL_PRICING = {
-    "qwen/qwen2.5-vl-32b-instruct": {"input": 0.20, "output": 0.60},
+    "qwen/qwen3-vl-32b-instruct": {"input": 0.104, "output": 0.416},
     "qwen/qwen2.5-vl-72b-instruct": {"input": 0.40, "output": 1.20},
-    "qwen/qwen-2.5-vl-7b-instruct": {"input": 0.05, "output": 0.15},
+    "qwen/qwen3-vl-8b-instruct": {"input": 0.08, "output": 0.50},
     "mistralai/pixtral-12b": {"input": 0.00, "output": 0.00},
     "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
     "gpt-4o": {"input": 5.00, "output": 15.00},

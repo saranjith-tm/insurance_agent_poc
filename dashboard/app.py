@@ -53,6 +53,8 @@ if "automation_thread" not in st.session_state:
     st.session_state.automation_thread = None
 if "last_log_count" not in st.session_state:
     st.session_state.last_log_count = 0
+if "cached_form_data" not in st.session_state:
+    st.session_state.cached_form_data = None
 
 st.markdown(get_header_html(), unsafe_allow_html=True)
 
@@ -175,7 +177,16 @@ conf_color = "#2e7d32" if conf >= 80 else "#f9a825" if conf >= 50 else "#c62828"
 handoff_note = " (Handoff!)" if conf < 50 and state.completed else ""
 
 with u_col5:
-    st.markdown(f"<div class='metric-box'><b>Image Confidence:</b> <span style='color:{conf_color};font-weight:bold'>{conf:.1f}%{handoff_note}</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='metric-box' title='Overall Average'><b>Overall Confidence:</b> <span style='color:{conf_color};font-weight:bold'>{conf:.1f}%{handoff_note}</span></div>", unsafe_allow_html=True)
+
+if state.doc_confidences:
+    st.markdown("<div style='margin-top: 10px;'><b>📄 Document Confidence Breakdown:</b></div>", unsafe_allow_html=True)
+    doc_cols = st.columns(len(state.doc_confidences))
+    for idx, (doc_name, d_conf) in enumerate(state.doc_confidences.items()):
+        val = d_conf * 100
+        d_color = "#2e7d32" if val >= 80 else "#f9a825" if val >= 50 else "#c62828"
+        with doc_cols[idx]:
+            st.markdown(f"<div class='doc-conf-box'><b>{doc_name}</b><br><span style='color:{d_color};font-weight:bold;font-size:16px;'>{val:.0f}%</span></div>", unsafe_allow_html=True)
 
 st.markdown("""
 <style>
@@ -186,6 +197,16 @@ st.markdown("""
     border: 1px solid #e9ecef;
     text-align: center;
     font-size: 14px;
+}
+.doc-conf-box {
+    background-color: #ffffff;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    text-align: center;
+    font-size: 12px;
+    margin-top: 5px;
+    margin-bottom: 15px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -200,6 +221,7 @@ with col_btn1:
         disabled=start_disabled,
         use_container_width=True,
     ):
+        st.session_state.cached_form_data = None
         with st.spinner("Starting automation agent..."):
             start_automation(
                 SALES_AGENT_URL,
@@ -278,49 +300,38 @@ with tab1:
                 unsafe_allow_html=True,
             )
     with col_right:
-        st.markdown("#### 📊 Extracted Applicant Data")
-        if state.extracted_data:
-            data = state.extracted_data
-            st.markdown(f"""
-| Field | Value |
-|-------|-------|
-| **Name** | {data.get("name", "-")} |
-| **Application No** | {data.get("application_no", "-")} |
-| **PAN Number** | `{data.get("pan_no", "-")}` |
-| **Aadhaar** | `{data.get("aadhaar_no", "-")}` |
-| **DOB** | {data.get("dob", "-")} |
-| **Gender** | {data.get("gender", "-")} |
-| **Occupation** | {data.get("occupation", "-")} |
-| **Industry** | {data.get("industry", "-")} |
-| **Education** | {data.get("education", "-")} |
-| **Annual Income** | ₹{data.get("annual_income", 0):,.0f} |
-| **Bank Account** | `{data.get("bank_account", "-")}` |
-| **IFSC** | `{data.get("ifsc", "-")}` |
-| **Nominee** | {data.get("nominee_name", "-")} ({data.get("nominee_relation", "-")}) |
-""")
-        else:
-            st.info("Applicant data will appear here once extraction is complete.")
-
-        st.markdown("#### ✅ Checklist Status")
         cs = fetch_checklist_status(UNDERWRITING_URL)
         if cs:
-            c2 = cs["cards"]["card2"]
-            c3 = cs["cards"]["card3"]
-            completed_count = sum(
-                1 for s in c2["sections"].values() if s.get("completed", False)
-            ) + sum(1 for s in c3["sections"].values() if s.get("completed", False))
-            st.markdown(f"**KYC + Financial sections completed:** {completed_count}/10")
-            for section_key, section in list(c2["sections"].items()) + list(
-                c3["sections"].items()
-            ):
-                icon = "✅" if section.get("completed") else "⏸"
-                color = "#e8f5e9" if section.get("completed") else "#f5f5f5"
-                st.markdown(
-                    f'<div style="background:{color};padding:3px 8px;border-radius:4px;margin:2px;font-size:12px">{icon} {section["title"]}</div>',
-                    unsafe_allow_html=True,
-                )
+            st.markdown("#### 📝 Submitted Underwriter Form Data")
+            
+            if state.running or state.completed:
+                # Prevent overwriting cache with a freshly spawned blank checklist after submission
+                is_fresh = not cs.get("cards", {}).get("card1", {}).get("fields", {}).get("case_type")
+                if not is_fresh or st.session_state.cached_form_data is None:
+                    st.session_state.cached_form_data = cs
+                
+            data_to_display = st.session_state.cached_form_data if st.session_state.cached_form_data else cs
+            
+            markdown_table = "| Field | Value |\n|-------|-------|\n"
+            
+            if "card1" in data_to_display["cards"]:
+                for k, v in data_to_display["cards"]["card1"].get("fields", {}).items():
+                    val = v if v not in [None, ""] else "-"
+                    markdown_table += f"| **{k.replace('_', ' ').title()}** | {val} |\n"
+            
+            for card_key in ["card2", "card3"]:
+                if card_key in data_to_display["cards"]:
+                    for sec_key, sec in data_to_display["cards"][card_key].get("sections", {}).items():
+                        if "fields" in sec:
+                            for k, v in sec["fields"].items():
+                                val = v if v not in [None, ""] else "-"
+                                if isinstance(val, bool):
+                                    val = "Yes" if val else "No"
+                                markdown_table += f"| **{k.replace('_', ' ').title()}** | `{val}` |\n"
+                                
+            st.markdown(markdown_table)
         else:
-            st.caption("Checklist app not yet started")
+            st.info("Checklist app not yet started. Form data will appear here once available.")
 
 with tab2:
     st.markdown("#### 🎥 Live Browser View")

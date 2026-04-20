@@ -139,8 +139,9 @@ def verify_documents_with_vlm(agent):
 
             # Update overall confidence in state
             with agent.state._lock:
-                agent.state.doc_confidences.append(confidence)
-                agent.state.image_confidence = sum(agent.state.doc_confidences) / len(agent.state.doc_confidences)
+                agent.state.doc_confidences[tab_name] = confidence
+                if agent.state.doc_confidences:
+                    agent.state.image_confidence = sum(agent.state.doc_confidences.values()) / len(agent.state.doc_confidences)
 
             # Update master validation results
             if "PAN" in doc_type_found:
@@ -322,8 +323,9 @@ def validate_documents_with_vlm(agent):
 
                         # Update overall confidence in state
                         with agent.state._lock:
-                            agent.state.doc_confidences.append(confidence)
-                            agent.state.image_confidence = sum(agent.state.doc_confidences) / len(agent.state.doc_confidences)
+                            agent.state.doc_confidences[doc_type.title()] = confidence
+                            if agent.state.doc_confidences:
+                                agent.state.image_confidence = sum(agent.state.doc_confidences.values()) / len(agent.state.doc_confidences)
 
                         status_icon = "✅" if is_valid and confidence > 0.7 else "❌"
                         agent.state.log(

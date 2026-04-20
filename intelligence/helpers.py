@@ -52,7 +52,7 @@ class AutomationState:
         self.output_tokens = 0
         self.total_cost = 0.0
         self.image_confidence = 0.0  # Overall image quality/extraction confidence
-        self.doc_confidences = [] # Individual doc confidence scores
+        self.doc_confidences = {} # Individual doc confidence scores
         self.start_time = None
         self.end_time = None
         self._lock = threading.Lock()
