@@ -33,19 +33,22 @@ def update_checklist_with_verification_results(agent):
     doc_confidences = agent.state.doc_confidences
 
     # Helper to find document metrics by substring (e.g. "AADHAAR")
-    def get_doc_metrics(doc_type_substring):
+    def get_doc_metrics(substrings):
+        if isinstance(substrings, str):
+            substrings = [substrings]
         for tab_name, details in val_details.items():
-            if doc_type_substring in details.get("doc_type", "").upper():
+            doc_type = details.get("doc_type", "").upper()
+            if any(sub.upper() in doc_type for sub in substrings):
                 conf = doc_confidences.get(tab_name, 0.0)
                 is_valid = details.get("valid", False)
-                ext_id = details.get("extracted_id")
-                return {"found": True, "conf": conf, "valid": is_valid, "extracted_id": ext_id}
-        return {"found": False, "conf": 0.0, "valid": False, "extracted_id": None}
+                ext_data = details.get("extracted_data", {})
+                return {"found": True, "conf": conf, "valid": is_valid, "extracted_data": ext_data}
+        return {"found": False, "conf": 0.0, "valid": False, "extracted_data": {}}
 
     pan_metrics = get_doc_metrics("PAN")
-    aadhaar_metrics = get_doc_metrics("AADHAAR")
-    bank_metrics = get_doc_metrics("BANK")
-    photo_metrics = get_doc_metrics("PROPOSAL")
+    aad_val_metrics = get_doc_metrics("AADHAAR")
+    bank_val_metrics = get_doc_metrics("BANK")
+    photo_val_metrics = get_doc_metrics(["PHOTO", "FACE", "PROPOSAL", "RCR"])
 
     # --- Section: PAN Validation ---
     agent.ui.scroll_to("sec-pan")
@@ -57,21 +60,21 @@ def update_checklist_with_verification_results(agent):
     agent.ui.click_yn("pan_copy_clear", pan_clear, "PAN Card Copy is clear and legible")
     agent.ui.click_yn("dob_matches_iuw", pan_matches, f"DOB matches IUW ({data.get('dob', 'N/A')})")
     
-    pan_no = pan_metrics.get("extracted_id") or data.get("pan_no") or data.get("pan_number", "")
+    pan_no = pan_metrics.get("extracted_data", {}).get("id_number") or data.get("pan_no") or data.get("pan_number", "")
     agent.ui.api_fill("pan_number_entered", pan_no, f"PAN Number = '{pan_no}'")
 
     # --- Section: Aadhaar Validation ---
     agent.ui.scroll_to("sec-aadhaar")
-    aad_uploaded = aadhaar_metrics["conf"] >= 0.1
-    aad_clear = aadhaar_metrics["conf"] >= 0.50
-    aad_matches = aadhaar_metrics["valid"]
+    aad_uploaded = aad_val_metrics["conf"] >= 0.1
+    aad_clear = aad_val_metrics["conf"] >= 0.50
+    aad_matches = aad_val_metrics["valid"]
 
     agent.ui.click_yn("aadhaar_copy_uploaded", aad_uploaded, "Aadhaar Card Copy uploaded")
     agent.ui.click_yn("aadhaar_copy_clear", aad_clear, "Aadhaar Card Copy is clear and legible")
     agent.ui.click_yn("aadhaar_name_matches", aad_matches, "Name matches Aadhaar card")
     agent.ui.click_yn("aadhaar_dob_matches", aad_matches, "DOB matches Aadhaar card")
     
-    aad_no = aadhaar_metrics.get("extracted_id") or data.get("aadhaar_no") or data.get("aadhaar_number", "")
+    aad_no = aad_val_metrics.get("extracted_data", {}).get("id_number") or data.get("aadhaar_no") or data.get("aadhaar_number", "")
     
     # Mask Aadhaar for privacy (like the old code did before it was removed)
     if aad_no and len(str(aad_no).replace(" ", "")) >= 12:
@@ -84,9 +87,9 @@ def update_checklist_with_verification_results(agent):
 
     # --- Section: Address Proof ---
     agent.ui.scroll_to("sec-address")
-    address_uploaded = aad_uploaded or (bank_metrics["conf"] >= 0.1)
-    address_clear = aad_clear or (bank_metrics["conf"] >= 0.50)
-    address_matches = aad_matches or bank_metrics["valid"]
+    address_uploaded = aad_uploaded or (bank_val_metrics["conf"] >= 0.1)
+    address_clear = aad_clear or (bank_val_metrics["conf"] >= 0.50)
+    address_matches = aad_matches or bank_val_metrics["valid"]
 
     agent.ui.click_yn("address_doc_uploaded", address_uploaded, "Address document uploaded")
     agent.ui.click_yn("address_doc_clear", address_clear, "Address document is clear")
@@ -94,9 +97,9 @@ def update_checklist_with_verification_results(agent):
 
     # --- Section: Photo Validation ---
     agent.ui.scroll_to("sec-photo")
-    photo_uploaded = photo_metrics["conf"] >= 0.1
-    photo_clear = photo_metrics["conf"] >= 0.50
-    photo_matches = photo_metrics["valid"]
+    photo_uploaded = photo_val_metrics["conf"] >= 0.1
+    photo_clear = photo_val_metrics["conf"] >= 0.50
+    photo_matches = photo_val_metrics["valid"]
 
     agent.ui.click_yn("photo_uploaded", photo_uploaded, "Applicant photo uploaded")
     agent.ui.click_yn("photo_clear", photo_clear, "Photo is clear and recognizable")
@@ -104,16 +107,18 @@ def update_checklist_with_verification_results(agent):
 
     # --- Section: Bank Validation ---
     agent.ui.scroll_to("sec-bank")
-    bank_uploaded = bank_metrics["conf"] >= 0.1
-    bank_matches = bank_metrics["valid"]
+    bank_uploaded = bank_val_metrics["conf"] >= 0.1
+    bank_matches = bank_val_metrics["valid"]
 
     agent.ui.click_yn("bank_statement_uploaded", bank_uploaded, "Bank statement uploaded")
     agent.ui.click_yn("account_no_matches", bank_matches, "Account number matches")
     agent.ui.click_yn("name_on_statement_matches", bank_matches, "Name on statement matches")
 
     # Fill bank text details
-    agent.ui.api_fill("account_number_entered", data.get("bank_account", ""), "Account Number")
-    agent.ui.api_fill("ifsc_entered", data.get("ifsc", ""), "IFSC Code")
+    acc_no = bank_val_metrics.get("extracted_data", {}).get("account_number") or data.get("bank_account", "")
+    ifsc = bank_val_metrics.get("extracted_data", {}).get("ifsc_code") or data.get("ifsc", "")
+    agent.ui.api_fill("account_number_entered", acc_no, "Account Number")
+    agent.ui.api_fill("ifsc_entered", ifsc, "IFSC Code")
 
 
 def fill_financial_sections(agent):

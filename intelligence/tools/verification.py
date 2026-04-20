@@ -114,11 +114,11 @@ def verify_documents_with_vlm(agent):
                 "TASKS:\n"
                 "1. What type of document is this? (doc_type: e.g. 'PAN', 'Aadhaar', 'Bank Statement', 'Face Verification', 'RCR', 'Other')\n"
                 "2. Is this document valid, legible, and matches the applicant data above? (valid: boolean)\n"
-                "3. If it is a PAN or Aadhaar, extract the ID number exactly as seen on the card. (extracted_id: string or null)\n"
+                "3. Extracted Data: If it is a PAN or Aadhaar, extract the ID number. If it is a Bank Statement, extract the Account Number and IFSC Code if visible. (extracted_data: dict)\n"
                 "4. Give a confidence score for the image quality and readability (0.0 to 1.0). (confidence: number)\n"
                 "5. What is your reasoning? (reasoning: string)\n\n"
                 "Return ONLY a JSON object: "
-                '{"doc_type": "text", "valid": bool, "extracted_id": "text or null", "confidence": float, "reasoning": "text"}'
+                '{"doc_type": "text", "valid": bool, "extracted_data": {"id_number": "text or null", "account_number": "text or null", "ifsc_code": "text or null"}, "confidence": float, "reasoning": "text"}'
             )
 
             result_data, usage = agent.vlm.analyze_document(screenshot, prompt)
@@ -132,12 +132,12 @@ def verify_documents_with_vlm(agent):
             doc_type_found = str(result_data.get("doc_type", "Other")).upper()
             is_valid = result_data.get("valid", False)
             confidence = result_data.get("confidence", 0.0)
-            extracted_id = result_data.get("extracted_id")
+            extracted_data = result_data.get("extracted_data", {})
             reasoning = result_data.get("reasoning", "No reasoning.")
 
             agent.state.log(f"  📝 Detected: {doc_type_found} (Conf: {confidence:.2f})", "info")
-            if extracted_id:
-                agent.state.log(f"  🔍 Extracted ID: {extracted_id}", "info")
+            if extracted_data:
+                agent.state.log(f"  🔍 Extracted Data: {extracted_data}", "info")
             agent.state.log(f"  🧠 Reasoning: {reasoning}", "info")
 
             # Update overall confidence in state
@@ -159,16 +159,19 @@ def verify_documents_with_vlm(agent):
                 
             elif "BANK" in doc_type_found:
                 agent._document_validation["bank_statement_valid"] = is_valid
+                status = "✅" if is_valid else "❌"
+                agent.state.log(f"  {status} Bank Statement Verification: {is_valid}", "success" if is_valid else "warning")
                 
-            elif "PROPOSAL" in doc_type_found or "RCR" in doc_type_found:
+            elif any(x in doc_type_found for x in ["PHOTO", "FACE", "PROPOSAL", "RCR"]):
                 agent._document_validation["proposal_valid"] = is_valid
-                agent.state.log(f"  ✅ Application Document verified: {doc_type_found}", "success")
+                status = "✅" if is_valid else "❌"
+                agent.state.log(f"  {status} Photo/Application Verification: {is_valid}", "success" if is_valid else "warning")
 
             # Store extra details
             agent._document_validation["validation_details"][tab_name] = {
                 "doc_type": doc_type_found,
                 "valid": is_valid,
-                "extracted_id": extracted_id,
+                "extracted_data": extracted_data,
                 "reasoning": reasoning
             }
 
