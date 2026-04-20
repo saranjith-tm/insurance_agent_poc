@@ -29,48 +29,87 @@ def update_checklist_with_verification_results(agent):
     agent.state.log("🎯 Applying verified document results to checklist...", "info")
     data = agent._applicant_data
     val = agent._document_validation
+    val_details = val.get("validation_details", {})
+    doc_confidences = agent.state.doc_confidences
+
+    # Helper to find document metrics by substring (e.g. "AADHAAR")
+    def get_doc_metrics(doc_type_substring):
+        for tab_name, details in val_details.items():
+            if doc_type_substring in details.get("doc_type", "").upper():
+                conf = doc_confidences.get(tab_name, 0.0)
+                is_valid = details.get("valid", False)
+                ext_id = details.get("extracted_id")
+                return {"found": True, "conf": conf, "valid": is_valid, "extracted_id": ext_id}
+        return {"found": False, "conf": 0.0, "valid": False, "extracted_id": None}
+
+    pan_metrics = get_doc_metrics("PAN")
+    aadhaar_metrics = get_doc_metrics("AADHAAR")
+    bank_metrics = get_doc_metrics("BANK")
+    photo_metrics = get_doc_metrics("PROPOSAL")
 
     # --- Section: PAN Validation ---
     agent.ui.scroll_to("sec-pan")
-    pan_valid = val.get("pan_valid", False)
-    agent.ui.click_yn("pan_copy_uploaded", pan_valid, "PAN Card Copy uploaded")
-    agent.ui.click_yn("pan_copy_clear", pan_valid, "PAN Card Copy is clear and legible")
-    agent.ui.click_yn("dob_matches_iuw", pan_valid, f"DOB matches IUW ({data.get('dob', 'N/A')})")
+    pan_uploaded = pan_metrics["conf"] >= 0.1
+    pan_clear = pan_metrics["conf"] >= 0.50
+    pan_matches = pan_metrics["valid"]
+
+    agent.ui.click_yn("pan_copy_uploaded", pan_uploaded, "PAN Card Copy uploaded")
+    agent.ui.click_yn("pan_copy_clear", pan_clear, "PAN Card Copy is clear and legible")
+    agent.ui.click_yn("dob_matches_iuw", pan_matches, f"DOB matches IUW ({data.get('dob', 'N/A')})")
     
-    pan_no = data.get("pan_no") or data.get("pan_number", "")
+    pan_no = pan_metrics.get("extracted_id") or data.get("pan_no") or data.get("pan_number", "")
     agent.ui.api_fill("pan_number_entered", pan_no, f"PAN Number = '{pan_no}'")
 
     # --- Section: Aadhaar Validation ---
     agent.ui.scroll_to("sec-aadhaar")
-    aadhaar_valid = val.get("aadhaar_valid", False)
-    agent.ui.click_yn("aadhaar_copy_uploaded", aadhaar_valid, "Aadhaar Card Copy uploaded")
-    agent.ui.click_yn("aadhaar_copy_clear", aadhaar_valid, "Aadhaar Card Copy is clear and legible")
-    agent.ui.click_yn("aadhaar_name_matches", aadhaar_valid, "Name matches Aadhaar card")
-    agent.ui.click_yn("aadhaar_dob_matches", aadhaar_valid, "DOB matches Aadhaar card")
+    aad_uploaded = aadhaar_metrics["conf"] >= 0.1
+    aad_clear = aadhaar_metrics["conf"] >= 0.50
+    aad_matches = aadhaar_metrics["valid"]
+
+    agent.ui.click_yn("aadhaar_copy_uploaded", aad_uploaded, "Aadhaar Card Copy uploaded")
+    agent.ui.click_yn("aadhaar_copy_clear", aad_clear, "Aadhaar Card Copy is clear and legible")
+    agent.ui.click_yn("aadhaar_name_matches", aad_matches, "Name matches Aadhaar card")
+    agent.ui.click_yn("aadhaar_dob_matches", aad_matches, "DOB matches Aadhaar card")
     
-    aad_no = data.get("aadhaar_no") or data.get("aadhaar_number", "")
-    agent.ui.api_fill("aadhaar_number_entered", aad_no, f"Aadhaar Number = '{aad_no}'")
+    aad_no = aadhaar_metrics.get("extracted_id") or data.get("aadhaar_no") or data.get("aadhaar_number", "")
+    
+    # Mask Aadhaar for privacy (like the old code did before it was removed)
+    if aad_no and len(str(aad_no).replace(" ", "")) >= 12:
+        clean_aad = str(aad_no).replace(" ", "")
+        masked = f"XXXX XXXX {clean_aad[-4:]}"
+    else:
+        masked = aad_no
+        
+    agent.ui.api_fill("aadhaar_number_entered", masked, f"Aadhaar Number = '{masked}'")
 
     # --- Section: Address Proof ---
     agent.ui.scroll_to("sec-address")
-    address_valid = aadhaar_valid or val.get("bank_statement_valid", False)
-    agent.ui.click_yn("address_doc_uploaded", address_valid, "Address document uploaded")
-    agent.ui.click_yn("address_doc_clear", address_valid, "Address document is clear")
-    agent.ui.click_yn("address_matches_iuw", address_valid, "Address matches IUW")
+    address_uploaded = aad_uploaded or (bank_metrics["conf"] >= 0.1)
+    address_clear = aad_clear or (bank_metrics["conf"] >= 0.50)
+    address_matches = aad_matches or bank_metrics["valid"]
+
+    agent.ui.click_yn("address_doc_uploaded", address_uploaded, "Address document uploaded")
+    agent.ui.click_yn("address_doc_clear", address_clear, "Address document is clear")
+    agent.ui.click_yn("address_matches_iuw", address_matches, "Address matches IUW")
 
     # --- Section: Photo Validation ---
     agent.ui.scroll_to("sec-photo")
-    photo_valid = val.get("proposal_valid", False) or val.get("face_verification_valid", False)
-    agent.ui.click_yn("photo_uploaded", photo_valid, "Applicant photo uploaded")
-    agent.ui.click_yn("photo_clear", photo_valid, "Photo is clear and recognizable")
-    agent.ui.click_yn("face_matches_id", photo_valid, "Face matches ID document")
+    photo_uploaded = photo_metrics["conf"] >= 0.1
+    photo_clear = photo_metrics["conf"] >= 0.50
+    photo_matches = photo_metrics["valid"]
+
+    agent.ui.click_yn("photo_uploaded", photo_uploaded, "Applicant photo uploaded")
+    agent.ui.click_yn("photo_clear", photo_clear, "Photo is clear and recognizable")
+    agent.ui.click_yn("face_matches_id", photo_matches, "Face matches ID document")
 
     # --- Section: Bank Validation ---
     agent.ui.scroll_to("sec-bank")
-    bank_valid = val.get("bank_statement_valid", False)
-    agent.ui.click_yn("bank_statement_uploaded", bank_valid, "Bank statement uploaded")
-    agent.ui.click_yn("account_no_matches", bank_valid, "Account number matches")
-    agent.ui.click_yn("name_on_statement_matches", bank_valid, "Name on statement matches")
+    bank_uploaded = bank_metrics["conf"] >= 0.1
+    bank_matches = bank_metrics["valid"]
+
+    agent.ui.click_yn("bank_statement_uploaded", bank_uploaded, "Bank statement uploaded")
+    agent.ui.click_yn("account_no_matches", bank_matches, "Account number matches")
+    agent.ui.click_yn("name_on_statement_matches", bank_matches, "Name on statement matches")
 
     # Fill bank text details
     agent.ui.api_fill("account_number_entered", data.get("bank_account", ""), "Account Number")
