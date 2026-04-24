@@ -55,6 +55,10 @@ if "last_log_count" not in st.session_state:
     st.session_state.last_log_count = 0
 if "cached_form_data" not in st.session_state:
     st.session_state.cached_form_data = None
+if "extracted_doc_data" not in st.session_state:
+    st.session_state.extracted_doc_data = None
+if "extracted_doc_image" not in st.session_state:
+    st.session_state.extracted_doc_image = None
 
 st.markdown(get_header_html(), unsafe_allow_html=True)
 
@@ -111,6 +115,29 @@ with st.sidebar:
     st.markdown(f"**Aadhaar:** `{APPLICANT_DATA['aadhaar_no']}`")
     st.markdown(f"**Occupation:** {APPLICANT_DATA['occupation']}")
     st.markdown(f"**Sum Assured:** ₹{APPLICANT_DATA['sum_assured']:,.0f}")
+    
+    st.divider()
+    st.markdown("**📄 Document Extraction**")
+    uploaded_file = st.file_uploader("Upload Insurance Document", type=["png", "jpg", "jpeg"])
+    if st.button("Extract Fields", disabled=not uploaded_file or not api_key):
+        with st.spinner("Extracting data..."):
+            try:
+                from intelligence.helpers import get_vlm_client
+                from constants import INSURANCE_APPLICATION_EXTRACTION_PROMPT
+                vlm = get_vlm_client(model_config, api_key)
+                image_bytes = uploaded_file.getvalue()
+                extracted_data, usage = vlm.analyze_document(image_bytes, INSURANCE_APPLICATION_EXTRACTION_PROMPT)
+                from crud import get_state
+                current_state = get_state()
+                current_state.update_usage(usage.input_tokens, usage.output_tokens, usage.model_id)
+                confidence = float(extracted_data.get("extraction_confidence", 0.95))
+                current_state.image_confidence = confidence
+                current_state.doc_confidences["Uploaded Loan Form"] = confidence
+                st.session_state.extracted_doc_data = extracted_data
+                st.session_state.extracted_doc_image = image_bytes
+                st.success("Extraction Complete! Check the '📄 Extraction Review' tab.")
+            except Exception as e:
+                st.error(f"Extraction failed: {str(e)}")
 
 state = get_state()
 
@@ -277,13 +304,14 @@ if state.running or state.completed or state.log_entries:
 
 st.divider()
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     [
         "📊 Dashboard",
         "🎥 Live View",
         "📸 Screenshots",
         "📋 Action Log",
         "📁 Architecture",
+        "📄 Extraction Review",
     ]
 )
 
@@ -420,6 +448,19 @@ with tab5:
         st.markdown(get_architecture_diagram())
     with col_b:
         st.markdown(get_architecture_desc())
+
+with tab6:
+    st.markdown("#### 📄 Extracted Document Review")
+    if st.session_state.extracted_doc_data and st.session_state.extracted_doc_image:
+        rev_col1, rev_col2 = st.columns([1, 1])
+        with rev_col1:
+            st.markdown("**Uploaded Document**")
+            st.image(st.session_state.extracted_doc_image, use_container_width=True)
+        with rev_col2:
+            st.markdown("**Extracted Data**")
+            st.json(st.session_state.extracted_doc_data)
+    else:
+        st.info("Upload and extract a document from the sidebar to review it here.")
 
 if state.running:
     time.sleep(2)
