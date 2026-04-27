@@ -62,6 +62,10 @@ if "extracted_doc_image" not in st.session_state:
     st.session_state.extracted_doc_image = None
 if "extracted_doc_pages" not in st.session_state:
     st.session_state.extracted_doc_pages = []  # list of image bytes, one per page
+if "validation_report" not in st.session_state:
+    st.session_state.validation_report = None
+if "rules_report" not in st.session_state:
+    st.session_state.rules_report = None
 
 st.markdown(get_header_html(), unsafe_allow_html=True)
 
@@ -133,84 +137,49 @@ with st.sidebar:
             with st.spinner("Extracting data…"):
                 try:
                     from intelligence.helpers import get_vlm_client
+                    from intelligence.tools.extraction import extract_document_fields
                     from constants import INSURANCE_APPLICATION_EXTRACTION_PROMPT
 
-                    def _pdf_to_images(pdf_bytes: bytes, dpi: int = 200) -> list[bytes]:
-                        """Render every page of a PDF to PNG bytes using PyMuPDF."""
-                        try:
-                            import pymupdf as fitz  # PyMuPDF >= 1.24
-                        except ImportError:
-                            import fitz  # older PyMuPDF
-                        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                        pages = []
-                        mat = fitz.Matrix(dpi / 72, dpi / 72)
-                        for page in doc:
-                            pix = page.get_pixmap(matrix=mat, alpha=False)
-                            pages.append(pix.tobytes("png"))
-                        doc.close()
-                        return pages
+                    total_pages_hint = [1]
+                    progress_bar = st.empty()
 
-                    def _merge_extracted(base: dict, update: dict) -> dict:
-                        """Merge two extracted JSON dicts; lists are concatenated, scalars only
-                        overwrite if the base value is empty."""
-                        result = dict(base)
-                        for k, v in update.items():
-                            if k == "extraction_confidence":
-                                continue  # handled separately
-                            if k not in result or result[k] in ("", None):
-                                result[k] = v
-                            elif isinstance(result[k], list) and isinstance(v, list):
-                                result[k] = result[k] + v
-                        return result
+                    def _on_progress(current: int, total: int):
+                        total_pages_hint[0] = total
+                        progress_bar.progress((current - 1) / total, text=f"Processing page {current} of {total}…")
 
                     vlm = get_vlm_client(model_config, api_key)
-                    file_bytes = uploaded_file.getvalue()
-                    is_pdf = uploaded_file.name.lower().endswith(".pdf")
-
-                    if is_pdf:
-                        page_images = _pdf_to_images(file_bytes)
-                    else:
-                        page_images = [file_bytes]
-
-                    total_pages = len(page_images)
-                    merged_data: dict = {}
-                    total_input, total_output = 0, 0
-                    all_confidences = []
-
-                    progress_bar = st.progress(0, text=f"Processing page 1 of {total_pages}…")
-                    for idx, img_bytes in enumerate(page_images):
-                        progress_bar.progress(
-                            (idx) / total_pages,
-                            text=f"Processing page {idx + 1} of {total_pages}…",
-                        )
-                        page_data, usage = vlm.analyze_document(img_bytes, INSURANCE_APPLICATION_EXTRACTION_PROMPT)
-                        total_input += usage.input_tokens
-                        total_output += usage.output_tokens
-                        conf = float(page_data.get("extraction_confidence", 0.95))
-                        all_confidences.append(conf)
-                        merged_data = _merge_extracted(merged_data, page_data)
+                    merged_data, page_images, avg_confidence, total_input, total_output, model_id = extract_document_fields(
+                        file_bytes=uploaded_file.getvalue(),
+                        filename=uploaded_file.name,
+                        vlm_client=vlm,
+                        prompt=INSURANCE_APPLICATION_EXTRACTION_PROMPT,
+                        progress_callback=_on_progress,
+                    )
                     progress_bar.progress(1.0, text="Done!")
-
-                    avg_confidence = sum(all_confidences) / len(all_confidences)
-                    merged_data["extraction_confidence"] = round(avg_confidence, 4)
 
                     from crud import get_state as _gs
                     current_state = _gs()
-                    current_state.update_usage(total_input, total_output, usage.model_id)
+                    current_state.update_usage(total_input, total_output, model_id)
                     current_state.image_confidence = avg_confidence
                     current_state.doc_confidences["Uploaded Document"] = avg_confidence
 
+                    from intelligence.tools.validation_agent import validate_fields
+                    from intelligence.tools.business_rules_agent import check_business_rules
+
+                    val_report = validate_fields(merged_data)
+                    rules_report = check_business_rules(merged_data, parsed_values=val_report.get("_parsed"))
+
+                    st.session_state.validation_report = val_report
+                    st.session_state.rules_report = rules_report
                     st.session_state.extracted_doc_data = merged_data
                     st.session_state.extracted_doc_pages = page_images
-                    # Keep first-page image for backwards compatibility
                     st.session_state.extracted_doc_image = page_images[0]
 
-                    label = f"{total_pages}-page PDF" if is_pdf else "document"
+                    n = total_pages_hint[0]
+                    label = f"{n}-page PDF" if uploaded_file.name.lower().endswith(".pdf") else "document"
                     st.success(f"Extraction complete ({label})! Check the '📄 Extraction Review' tab.")
                 except Exception as e:
                     st.error(f"Extraction failed: {str(e)}")
-
-
 state = get_state()
 
 col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
@@ -538,8 +507,34 @@ with tab6:
                 )
                 st.image(pages[page_num - 1], caption=f"Page {page_num} of {len(pages)}", use_container_width=True)
         with rev_col2:
-            st.markdown("**Extracted Data (merged across all pages)**")
-            st.json(st.session_state.extracted_doc_data)
+            st.markdown("**1. Extracted Data (merged across all pages)**")
+            with st.expander("View Raw JSON", expanded=False):
+                st.json(st.session_state.extracted_doc_data)
+
+            if st.session_state.validation_report:
+                vr = st.session_state.validation_report
+                st.markdown(f"**2. Field Validation** (Pass: {vr['summary']['pass']} | Fail: {vr['summary']['fail']} | Warn: {vr['summary']['warn']})")
+                
+                html_val = "<table style='width: 100%; border-collapse: collapse; font-size: 13px;'><tr><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Check</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Value</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Status</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Message</th></tr>"
+                for c in vr["checks"]:
+                    color = "green" if c["status"] == "pass" else ("orange" if c["status"] == "warn" else "red")
+                    icon = "✅" if c["status"] == "pass" else ("⚠️" if c["status"] == "warn" else "❌")
+                    html_val += f"<tr><td style='border-bottom: 1px solid #eee; padding: 4px;'>{c['check']}</td><td style='border-bottom: 1px solid #eee; padding: 4px;'>{c['value']}</td><td style='border-bottom: 1px solid #eee; padding: 4px; color:{color}'><b>{icon} {c['status'].upper()}</b></td><td style='border-bottom: 1px solid #eee; padding: 4px;'>{c['message']}</td></tr>"
+                html_val += "</table><br/>"
+                st.markdown(html_val, unsafe_allow_html=True)
+
+            if st.session_state.rules_report:
+                rr = st.session_state.rules_report
+                st.markdown(f"**3. Business Rules** (Pass: {rr['summary']['pass']} | Error: {rr['summary']['error']} | Warn: {rr['summary']['warn']})")
+                
+                html_rules = "<table style='width: 100%; border-collapse: collapse; font-size: 13px;'><tr><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Rule</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Status</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Message</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Code</th></tr>"
+                for r in rr["rules"]:
+                    color = "green" if r["status"] == "pass" else ("orange" if r["status"] == "warn" else "red")
+                    icon = "✅" if r["status"] == "pass" else ("⚠️" if r["status"] == "warn" else "❌")
+                    code_html = f"<code>{r['code']}</code>" if r['code'] else ""
+                    html_rules += f"<tr><td style='border-bottom: 1px solid #eee; padding: 4px;'>{r['rule']}</td><td style='border-bottom: 1px solid #eee; padding: 4px; color:{color}'><b>{icon} {r['status'].upper()}</b></td><td style='border-bottom: 1px solid #eee; padding: 4px;'>{r['message']}</td><td style='border-bottom: 1px solid #eee; padding: 4px;'>{code_html}</td></tr>"
+                html_rules += "</table>"
+                st.markdown(html_rules, unsafe_allow_html=True)
     else:
         st.info("Upload and extract a document from the sidebar to review it here.")
 

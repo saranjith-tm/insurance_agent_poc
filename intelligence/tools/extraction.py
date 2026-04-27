@@ -148,3 +148,112 @@ def run_step_extract_applicant_data(agent):
 
     agent.state.set_progress(0.12)
     agent.ui.wait(0.3)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard document extraction helpers
+# (used by dashboard/app.py — independent of the underwriting agent)
+# ---------------------------------------------------------------------------
+
+def pdf_to_images(pdf_bytes: bytes, dpi: int = 200) -> list:
+    """Render every page of a PDF to PNG bytes using PyMuPDF.
+
+    Returns a list of bytes objects, one PNG per page.
+    Requires: pymupdf >= 1.24  (pip install pymupdf)
+    """
+    try:
+        import pymupdf as fitz  # PyMuPDF >= 1.24
+    except ImportError:
+        import fitz  # older PyMuPDF
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    mat = fitz.Matrix(dpi / 72, dpi / 72)
+    pages = []
+    for page in doc:
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        pages.append(pix.tobytes("png"))
+    doc.close()
+    return pages
+
+
+def merge_extracted_data(base: dict, update: dict) -> dict:
+    """Deep-merge two extracted JSON dicts from consecutive VLM calls.
+
+    Rules:
+    - 'extraction_confidence' is skipped (caller handles it separately).
+    - Scalar values: only overwrite if the existing value is empty / None.
+    - List values: concatenate.
+    """
+    result = dict(base)
+    for k, v in update.items():
+        if k == "extraction_confidence":
+            continue
+        if k not in result or result[k] in ("", None):
+            result[k] = v
+        elif isinstance(result[k], list) and isinstance(v, list):
+            result[k] = result[k] + v
+    return result
+
+
+def extract_document_fields(
+    file_bytes: bytes,
+    filename: str,
+    vlm_client,
+    prompt: str,
+    progress_callback=None,
+):
+    """Extract all fields from an uploaded document (image or PDF).
+
+    Parameters
+    ----------
+    file_bytes : bytes
+        Raw bytes of the uploaded file.
+    filename : str
+        Original filename — used to detect the '.pdf' extension.
+    vlm_client :
+        An initialised VLM client (from intelligence.helpers.get_vlm_client).
+    prompt : str
+        System prompt sent to the VLM for every page.
+    progress_callback : callable(current_page: int, total_pages: int), optional
+        Called before each page is processed so the caller can update a UI
+        progress indicator.
+
+    Returns
+    -------
+    tuple:
+        merged_data        : dict   — extracted fields merged across all pages
+        page_images        : list   — list[bytes] PNG per page
+        avg_confidence     : float  — average extraction_confidence
+        total_input_tokens : int
+        total_output_tokens: int
+        model_id           : str
+    """
+    is_pdf = filename.lower().endswith(".pdf")
+    page_images = pdf_to_images(file_bytes) if is_pdf else [file_bytes]
+
+    total_pages = len(page_images)
+    merged_data: dict = {}
+    total_input = 0
+    total_output = 0
+    confidences = []
+    last_usage = None
+
+    for idx, img_bytes in enumerate(page_images):
+        if progress_callback:
+            progress_callback(idx + 1, total_pages)
+
+        page_data, usage = vlm_client.analyze_document(img_bytes, prompt)
+        total_input += usage.input_tokens
+        total_output += usage.output_tokens
+        last_usage = usage
+
+        conf = float(page_data.get("extraction_confidence", 0.95))
+        confidences.append(conf)
+        merged_data = merge_extracted_data(merged_data, page_data)
+
+    avg_confidence = sum(confidences) / len(confidences)
+    merged_data["extraction_confidence"] = round(avg_confidence, 4)
+
+    model_id = last_usage.model_id if last_usage else ""
+    return merged_data, page_images, avg_confidence, total_input, total_output, model_id
+
