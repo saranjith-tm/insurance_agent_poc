@@ -11,20 +11,6 @@ from typing import Any, Optional
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _find(data: dict, *keys: str) -> Any:
-    """Search a (possibly nested) dict for the first key that contains any of
-    *keys* as a case-insensitive substring. Returns the value or None."""
-    for k, v in data.items():
-        for target in keys:
-            if target.lower() in k.lower():
-                return v
-        if isinstance(v, dict):
-            result = _find(v, *keys)
-            if result is not None:
-                return result
-    return None
-
-
 def _parse_number(val) -> Optional[float]:
     """Parse strings like '67,00,000' or '₹50 L' to float."""
     if val is None:
@@ -93,7 +79,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks = []
 
     # Aadhaar
-    aadhaar_raw = _find(extracted_data, "aadhaar")
+    aadhaar_raw = extracted_data.get("aadhaar_no")
     aadhaar_clean = re.sub(r"[\s\-]", "", str(aadhaar_raw or ""))
     aadhaar_ok = bool(re.fullmatch(r"\d{12}", aadhaar_clean))
     checks.append(_check(
@@ -102,7 +88,7 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # PAN
-    pan_raw = _find(extracted_data, "pan")
+    pan_raw = extracted_data.get("pan_card_no")
     pan_clean = str(pan_raw or "").strip().upper()
     pan_ok = bool(re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", pan_clean))
     checks.append(_check(
@@ -111,7 +97,7 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # Mobile
-    mobile_raw = _find(extracted_data, "mobile")
+    mobile_raw = extracted_data.get("mobile_number")
     mobile_clean = re.sub(r"[\s\-+]", "", str(mobile_raw or ""))
     if mobile_clean.startswith("91") and len(mobile_clean) == 12:
         mobile_clean = mobile_clean[2:]
@@ -122,7 +108,7 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # Email
-    email_raw = _find(extracted_data, "email")
+    email_raw = extracted_data.get("email_address")
     email_ok = bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", str(email_raw or "")))
     checks.append(_check(
         "Email Address", email_raw, email_ok,
@@ -130,7 +116,7 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # Date of Birth
-    dob_raw = _find(extracted_data, "dob", "date_of_birth", "birth")
+    dob_raw = extracted_data.get("date_of_birth")
     dob = _parse_date(dob_raw)
     checks.append(_check(
         "Date of Birth Parseable", dob_raw, dob is not None,
@@ -146,7 +132,7 @@ def validate_fields(extracted_data: dict) -> dict:
         ))
 
     # Gender
-    gender_raw = _find(extracted_data, "gender")
+    gender_raw = extracted_data.get("gender")
     gender_ok = str(gender_raw or "").strip().lower() in ("male", "female", "other", "transgender")
     checks.append(_check(
         "Gender Valid", gender_raw, gender_ok,
@@ -154,7 +140,7 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # Pincode
-    pin_raw = _find(extracted_data, "pincode", "pin_code", "postal")
+    pin_raw = extracted_data.get("pincode")
     pin_clean = re.sub(r"\s", "", str(pin_raw or ""))
     pin_ok = bool(re.fullmatch(r"[1-9]\d{5}", pin_clean))
     checks.append(_check(
@@ -163,7 +149,7 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # Sum Assured
-    sa_raw = _find(extracted_data, "sum_assured")
+    sa_raw = extracted_data.get("sum_assured")
     sa = _parse_number(sa_raw)
     sa_ok = sa is not None and sa > 0
     checks.append(_check(
@@ -172,7 +158,7 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # Height
-    h_raw = _find(extracted_data, "height")
+    h_raw = extracted_data.get("height_cm")
     h = _parse_number(h_raw)
     h_ok = h is not None and 100 <= h <= 250
     checks.append(_check(
@@ -181,7 +167,7 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # Weight
-    w_raw = _find(extracted_data, "weight")
+    w_raw = extracted_data.get("weight_kg")
     w = _parse_number(w_raw)
     w_ok = w is not None and 20 <= w <= 300
     checks.append(_check(
@@ -190,13 +176,33 @@ def validate_fields(extracted_data: dict) -> dict:
     ))
 
     # Loan Tenure
-    tenure_raw = _find(extracted_data, "loan_tenure", "tenure_months", "tenure")
+    tenure_raw = extracted_data.get("loan_tenure")
     tenure = _parse_number(tenure_raw)
     tenure_ok = tenure is not None and tenure > 0
     checks.append(_check(
         "Loan Tenure (months)", tenure_raw, tenure_ok,
         f"Loan tenure: {tenure} months." if tenure_ok else f"Cannot parse loan tenure: '{tenure_raw}'",
     ))
+
+    # Summary
+    pass_n = sum(1 for c in checks if c["status"] == "pass")
+    fail_n = sum(1 for c in checks if c["status"] == "fail")
+    warn_n = sum(1 for c in checks if c["status"] == "warn")
+    status = "fail" if fail_n > 0 else ("warn" if warn_n > 0 else "pass")
+
+    return {
+        "checks": checks,
+        "summary": {"pass": pass_n, "fail": fail_n, "warn": warn_n},
+        "status": status,
+        "_parsed": {
+            "dob": dob,
+            "age": age,
+            "sum_assured": sa,
+            "height_cm": h,
+            "weight_kg": w,
+            "loan_tenure_months": tenure,
+        },
+    }
 
     # Summary
     pass_n = sum(1 for c in checks if c["status"] == "pass")
