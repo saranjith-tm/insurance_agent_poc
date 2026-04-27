@@ -96,6 +96,13 @@ with st.sidebar:
         api_key = st.text_input("API Key", type="password")
     st.divider()
 
+    st.markdown("**Azure Document Intelligence**")
+    from config import AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT, AZURE_DOCUMENT_INTELLIGENCE_KEY, AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID
+    azure_endpoint = st.text_input("Azure Endpoint", value=AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT)
+    azure_key = st.text_input("Azure Key", value=AZURE_DOCUMENT_INTELLIGENCE_KEY, type="password")
+    azure_model_id = st.text_input("Model ID", value=AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID, help="Leave as 'prebuilt-document' or enter your custom model ID.")
+    st.divider()
+
     st.markdown("**Automation Settings**")
     use_visual_mode = st.toggle("🤖 VLM Visual Mode", value=True)
     step_delay = st.slider(
@@ -104,23 +111,13 @@ with st.sidebar:
     app_no = st.text_input("Application Number", value="OS121345678")
     st.divider()
 
-    st.markdown("**🎥 Browser & Recording**")
-    headed_mode = st.toggle("👁 Show Browser Window", value=False)
-    record_video = st.toggle("🎬 Record Session Video", value=False)
-    st.divider()
+    headed_mode = False
+    record_video = False
+
 
     st.markdown("**🔗 Application Links**")
     st.markdown(f"[📋 Sales Agent App]({SALES_AGENT_URL}) (port 5001)")
     st.markdown(f"[✅ Underwriting App]({UNDERWRITING_URL}) (port 5002)")
-    st.divider()
-
-    st.markdown("**👤 Demo Applicant**")
-    st.markdown(f"**Name:** {APPLICANT_DATA['name']}")
-    st.markdown(f"**PAN:** `{APPLICANT_DATA['pan_no']}`")
-    st.markdown(f"**Aadhaar:** `{APPLICANT_DATA['aadhaar_no']}`")
-    st.markdown(f"**Occupation:** {APPLICANT_DATA['occupation']}")
-    st.markdown(f"**Sum Assured:** ₹{APPLICANT_DATA['sum_assured']:,.0f}")
-    
     st.divider()
     st.markdown("**📄 Document Extraction**")
     uploaded_file = st.file_uploader(
@@ -131,15 +128,13 @@ with st.sidebar:
     if st.button("🔍 Extract Fields", use_container_width=True):
         if not uploaded_file:
             st.warning("⚠️ Please upload a document first.")
-        elif not api_key:
-            st.warning("⚠️ Please enter an API key above.")
+        elif not azure_endpoint or not azure_key:
+            st.warning("⚠️ Please enter Azure Document Intelligence Endpoint and Key above.")
         else:
-            with st.spinner("Extracting data…"):
+            with st.spinner("Extracting data via Azure Document Intelligence…"):
                 try:
-                    from intelligence.helpers import get_vlm_client
                     from intelligence.tools.extraction import extract_document_fields
-                    from constants import INSURANCE_APPLICATION_EXTRACTION_PROMPT
-
+                    
                     total_pages_hint = [1]
                     progress_bar = st.empty()
 
@@ -147,12 +142,12 @@ with st.sidebar:
                         total_pages_hint[0] = total
                         progress_bar.progress((current - 1) / total, text=f"Processing page {current} of {total}…")
 
-                    vlm = get_vlm_client(model_config, api_key)
                     merged_data, page_images, avg_confidence, total_input, total_output, model_id = extract_document_fields(
                         file_bytes=uploaded_file.getvalue(),
                         filename=uploaded_file.name,
-                        vlm_client=vlm,
-                        prompt=INSURANCE_APPLICATION_EXTRACTION_PROMPT,
+                        azure_endpoint=azure_endpoint,
+                        azure_key=azure_key,
+                        azure_model_id=azure_model_id,
                         progress_callback=_on_progress,
                     )
                     progress_bar.progress(1.0, text="Done!")

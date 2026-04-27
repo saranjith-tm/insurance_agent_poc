@@ -198,11 +198,12 @@ def merge_extracted_data(base: dict, update: dict) -> dict:
 def extract_document_fields(
     file_bytes: bytes,
     filename: str,
-    vlm_client,
-    prompt: str,
+    azure_endpoint: str,
+    azure_key: str,
+    azure_model_id: str = "prebuilt-document",
     progress_callback=None,
 ):
-    """Extract all fields from an uploaded document (image or PDF).
+    """Extract all fields from an uploaded document using Azure Document Intelligence.
 
     Parameters
     ----------
@@ -210,50 +211,88 @@ def extract_document_fields(
         Raw bytes of the uploaded file.
     filename : str
         Original filename — used to detect the '.pdf' extension.
-    vlm_client :
-        An initialised VLM client (from intelligence.helpers.get_vlm_client).
-    prompt : str
-        System prompt sent to the VLM for every page.
+    azure_endpoint : str
+        Azure Document Intelligence Endpoint.
+    azure_key : str
+        Azure Document Intelligence API Key.
+    azure_model_id : str
+        Custom model ID, defaults to 'prebuilt-document'.
     progress_callback : callable(current_page: int, total_pages: int), optional
-        Called before each page is processed so the caller can update a UI
-        progress indicator.
+        Called to update a UI progress indicator.
 
     Returns
     -------
     tuple:
-        merged_data        : dict   — extracted fields merged across all pages
-        page_images        : list   — list[bytes] PNG per page
+        merged_data        : dict   — extracted key-value pairs
+        page_images        : list   — list[bytes] PNG per page for UI
         avg_confidence     : float  — average extraction_confidence
-        total_input_tokens : int
-        total_output_tokens: int
-        model_id           : str
+        total_input_tokens : int    — 0 (not applicable for Azure)
+        total_output_tokens: int    — 0 (not applicable for Azure)
+        model_id           : str    — 'azure-prebuilt-document'
     """
+    from azure.core.credentials import AzureKeyCredential
+    from azure.ai.documentintelligence import DocumentIntelligenceClient
+    import re
+
     is_pdf = filename.lower().endswith(".pdf")
     page_images = pdf_to_images(file_bytes) if is_pdf else [file_bytes]
 
-    total_pages = len(page_images)
-    merged_data: dict = {}
-    total_input = 0
-    total_output = 0
+    if progress_callback:
+        progress_callback(1, 1)
+
+    content_type = "application/pdf" if is_pdf else "application/octet-stream"
+
+    client = DocumentIntelligenceClient(
+        endpoint=azure_endpoint,
+        credential=AzureKeyCredential(azure_key)
+    )
+
+    poller = client.begin_analyze_document(
+        azure_model_id,
+        body=file_bytes,
+        content_type=content_type
+    )
+    result = poller.result()
+
+    merged_data = {}
     confidences = []
-    last_usage = None
 
-    for idx, img_bytes in enumerate(page_images):
-        if progress_callback:
-            progress_callback(idx + 1, total_pages)
+    # 1. Process Key-Value Pairs (common in prebuilt-document model)
+    if hasattr(result, "key_value_pairs") and result.key_value_pairs:
+        for kvp in result.key_value_pairs:
+            if kvp.key and hasattr(kvp.key, "content") and kvp.value and hasattr(kvp.value, "content"):
+                # Normalize key
+                key = kvp.key.content.strip().lower()
+                key = re.sub(r'[^a-z0-9]+', '_', key).strip('_')
+                
+                value = kvp.value.content.strip()
+                conf = kvp.confidence if hasattr(kvp, "confidence") else 0.95
+                confidences.append(conf)
+                
+                if key not in merged_data or merged_data[key] in ("", None):
+                    merged_data[key] = value
 
-        page_data, usage = vlm_client.analyze_document(img_bytes, prompt)
-        total_input += usage.input_tokens
-        total_output += usage.output_tokens
-        last_usage = usage
+    # 2. Process Fields from Documents (common in custom models)
+    if hasattr(result, "documents") and result.documents:
+        for doc in result.documents:
+            if hasattr(doc, "fields") and doc.fields:
+                for name, field in doc.fields.items():
+                    # Normalize key from the field name
+                    key = name.strip().lower()
+                    key = re.sub(r'[^a-z0-9]+', '_', key).strip('_')
+                    
+                    value = field.content if hasattr(field, "content") else field.value
+                    if value is None:
+                        value = ""
+                    
+                    conf = field.confidence if hasattr(field, "confidence") else 0.95
+                    confidences.append(conf)
+                    
+                    if key not in merged_data or merged_data[key] in ("", None):
+                        merged_data[key] = value
 
-        conf = float(page_data.get("extraction_confidence", 0.95))
-        confidences.append(conf)
-        merged_data = merge_extracted_data(merged_data, page_data)
-
-    avg_confidence = sum(confidences) / len(confidences)
+    avg_confidence = sum(confidences) / len(confidences) if confidences else 1.0
     merged_data["extraction_confidence"] = round(avg_confidence, 4)
 
-    model_id = last_usage.model_id if last_usage else ""
-    return merged_data, page_images, avg_confidence, total_input, total_output, model_id
+    return merged_data, page_images, avg_confidence, 0, 0, f"azure-{azure_model_id}"
 

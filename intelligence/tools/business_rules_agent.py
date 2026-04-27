@@ -134,7 +134,7 @@ def check_business_rules(extracted_data: dict, parsed_values: dict = None) -> di
         rules.append(_warn("Age > 55 with SA > ₹50L", "Age or Sum Assured not available."))
 
     # ── Rule 5: Nominee ≠ Applicant ──────────────────────────────────────────
-    applicant_raw = _find(extracted_data, "insured_name", "applicant_name", "member_name", "mph_master")
+    applicant_raw = _find(extracted_data, "insured_name", "applicant_name", "member_name", "mph_master", "master_policy_holder")
     nominee_raw = _find(extracted_data, "nominee_name", "nominee")
     if applicant_raw and nominee_raw:
         same = _normalize_name(applicant_raw) == _normalize_name(nominee_raw)
@@ -164,13 +164,35 @@ def check_business_rules(extracted_data: dict, parsed_values: dict = None) -> di
     if h and w and h > 0:
         bmi = w / ((h / 100) ** 2)
 
+    # Search for health declarations in various possible field names
     dgh_raw = _find(extracted_data, "health_questionnaire", "dgh", "good_health", "declaration_of_good_health")
+    
+    # Check specific history fields from custom model
+    health_history_fields = [
+        "chronic_disease_history",
+        "recent_hospitalization_or_surgery",
+        "physical_disability_or_birth_defect",
+        "major_disease_history",
+        "ongoing_medication_or_tests"
+    ]
+    
     any_dgh_yes = False
+    
+    # 1. Check the general DGH field (if it's a list of objects from VLM/Azure)
     if isinstance(dgh_raw, list):
         any_dgh_yes = any(
             item.get("yes") is True or str(item.get("yes", "")).lower() == "yes"
             for item in dgh_raw if isinstance(item, dict)
         )
+    elif str(dgh_raw).lower() in ("yes", "true", "t", "y"):
+        any_dgh_yes = True
+        
+    # 2. Check the specific custom history fields
+    for field_name in health_history_fields:
+        val = extracted_data.get(field_name)
+        if val and str(val).lower() in ("yes", "true", "t", "y"):
+            any_dgh_yes = True
+            break
 
     if bmi is not None:
         if bmi >= 30 and any_dgh_yes:
