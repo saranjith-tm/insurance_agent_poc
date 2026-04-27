@@ -6,6 +6,7 @@ import sys
 import os
 import time
 import base64
+import io
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -59,6 +60,8 @@ if "extracted_doc_data" not in st.session_state:
     st.session_state.extracted_doc_data = None
 if "extracted_doc_image" not in st.session_state:
     st.session_state.extracted_doc_image = None
+if "extracted_doc_pages" not in st.session_state:
+    st.session_state.extracted_doc_pages = []  # list of image bytes, one per page
 
 st.markdown(get_header_html(), unsafe_allow_html=True)
 
@@ -81,8 +84,6 @@ with st.sidebar:
         api_key = st.text_input(
             "OpenRouter API Key", value=DEFAULT_OPENROUTER_KEY, type="password"
         )
-    elif provider == "anthropic":
-        api_key = st.text_input("Anthropic API Key", type="password")
     elif provider == "openai":
         api_key = st.text_input("OpenAI API Key", value=DEFAULT_OPENAI_KEY, type="password")
     elif provider == "google":
@@ -118,26 +119,97 @@ with st.sidebar:
     
     st.divider()
     st.markdown("**📄 Document Extraction**")
-    uploaded_file = st.file_uploader("Upload Insurance Document", type=["png", "jpg", "jpeg"])
-    if st.button("Extract Fields", disabled=not uploaded_file or not api_key):
-        with st.spinner("Extracting data..."):
-            try:
-                from intelligence.helpers import get_vlm_client
-                from constants import INSURANCE_APPLICATION_EXTRACTION_PROMPT
-                vlm = get_vlm_client(model_config, api_key)
-                image_bytes = uploaded_file.getvalue()
-                extracted_data, usage = vlm.analyze_document(image_bytes, INSURANCE_APPLICATION_EXTRACTION_PROMPT)
-                from crud import get_state
-                current_state = get_state()
-                current_state.update_usage(usage.input_tokens, usage.output_tokens, usage.model_id)
-                confidence = float(extracted_data.get("extraction_confidence", 0.95))
-                current_state.image_confidence = confidence
-                current_state.doc_confidences["Uploaded Loan Form"] = confidence
-                st.session_state.extracted_doc_data = extracted_data
-                st.session_state.extracted_doc_image = image_bytes
-                st.success("Extraction Complete! Check the '📄 Extraction Review' tab.")
-            except Exception as e:
-                st.error(f"Extraction failed: {str(e)}")
+    uploaded_file = st.file_uploader(
+        "Upload Insurance Document",
+        type=["png", "jpg", "jpeg", "pdf"],
+        help="Supports images (PNG/JPG) and multi-page PDF documents.",
+    )
+    if st.button("🔍 Extract Fields", use_container_width=True):
+        if not uploaded_file:
+            st.warning("⚠️ Please upload a document first.")
+        elif not api_key:
+            st.warning("⚠️ Please enter an API key above.")
+        else:
+            with st.spinner("Extracting data…"):
+                try:
+                    from intelligence.helpers import get_vlm_client
+                    from constants import INSURANCE_APPLICATION_EXTRACTION_PROMPT
+
+                    def _pdf_to_images(pdf_bytes: bytes, dpi: int = 200) -> list[bytes]:
+                        """Render every page of a PDF to PNG bytes using PyMuPDF."""
+                        try:
+                            import pymupdf as fitz  # PyMuPDF >= 1.24
+                        except ImportError:
+                            import fitz  # older PyMuPDF
+                        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                        pages = []
+                        mat = fitz.Matrix(dpi / 72, dpi / 72)
+                        for page in doc:
+                            pix = page.get_pixmap(matrix=mat, alpha=False)
+                            pages.append(pix.tobytes("png"))
+                        doc.close()
+                        return pages
+
+                    def _merge_extracted(base: dict, update: dict) -> dict:
+                        """Merge two extracted JSON dicts; lists are concatenated, scalars only
+                        overwrite if the base value is empty."""
+                        result = dict(base)
+                        for k, v in update.items():
+                            if k == "extraction_confidence":
+                                continue  # handled separately
+                            if k not in result or result[k] in ("", None):
+                                result[k] = v
+                            elif isinstance(result[k], list) and isinstance(v, list):
+                                result[k] = result[k] + v
+                        return result
+
+                    vlm = get_vlm_client(model_config, api_key)
+                    file_bytes = uploaded_file.getvalue()
+                    is_pdf = uploaded_file.name.lower().endswith(".pdf")
+
+                    if is_pdf:
+                        page_images = _pdf_to_images(file_bytes)
+                    else:
+                        page_images = [file_bytes]
+
+                    total_pages = len(page_images)
+                    merged_data: dict = {}
+                    total_input, total_output = 0, 0
+                    all_confidences = []
+
+                    progress_bar = st.progress(0, text=f"Processing page 1 of {total_pages}…")
+                    for idx, img_bytes in enumerate(page_images):
+                        progress_bar.progress(
+                            (idx) / total_pages,
+                            text=f"Processing page {idx + 1} of {total_pages}…",
+                        )
+                        page_data, usage = vlm.analyze_document(img_bytes, INSURANCE_APPLICATION_EXTRACTION_PROMPT)
+                        total_input += usage.input_tokens
+                        total_output += usage.output_tokens
+                        conf = float(page_data.get("extraction_confidence", 0.95))
+                        all_confidences.append(conf)
+                        merged_data = _merge_extracted(merged_data, page_data)
+                    progress_bar.progress(1.0, text="Done!")
+
+                    avg_confidence = sum(all_confidences) / len(all_confidences)
+                    merged_data["extraction_confidence"] = round(avg_confidence, 4)
+
+                    from crud import get_state as _gs
+                    current_state = _gs()
+                    current_state.update_usage(total_input, total_output, usage.model_id)
+                    current_state.image_confidence = avg_confidence
+                    current_state.doc_confidences["Uploaded Document"] = avg_confidence
+
+                    st.session_state.extracted_doc_data = merged_data
+                    st.session_state.extracted_doc_pages = page_images
+                    # Keep first-page image for backwards compatibility
+                    st.session_state.extracted_doc_image = page_images[0]
+
+                    label = f"{total_pages}-page PDF" if is_pdf else "document"
+                    st.success(f"Extraction complete ({label})! Check the '📄 Extraction Review' tab.")
+                except Exception as e:
+                    st.error(f"Extraction failed: {str(e)}")
+
 
 state = get_state()
 
@@ -451,13 +523,22 @@ with tab5:
 
 with tab6:
     st.markdown("#### 📄 Extracted Document Review")
-    if st.session_state.extracted_doc_data and st.session_state.extracted_doc_image:
+    if st.session_state.extracted_doc_data and st.session_state.extracted_doc_pages:
+        pages = st.session_state.extracted_doc_pages
         rev_col1, rev_col2 = st.columns([1, 1])
         with rev_col1:
-            st.markdown("**Uploaded Document**")
-            st.image(st.session_state.extracted_doc_image, use_container_width=True)
+            st.markdown(f"**Uploaded Document** ({len(pages)} page{'s' if len(pages) > 1 else ''})")
+            if len(pages) == 1:
+                st.image(pages[0], use_container_width=True)
+            else:
+                # Show a page selector for multi-page PDFs
+                page_num = st.number_input(
+                    "Page", min_value=1, max_value=len(pages), value=1, step=1,
+                    key="doc_review_page"
+                )
+                st.image(pages[page_num - 1], caption=f"Page {page_num} of {len(pages)}", use_container_width=True)
         with rev_col2:
-            st.markdown("**Extracted Data**")
+            st.markdown("**Extracted Data (merged across all pages)**")
             st.json(st.session_state.extracted_doc_data)
     else:
         st.info("Upload and extract a document from the sidebar to review it here.")
