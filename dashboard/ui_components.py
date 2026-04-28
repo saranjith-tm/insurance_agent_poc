@@ -101,6 +101,48 @@ def get_custom_css():
   }
   .status-key-label { font-weight: 600; color: #1a237e; }
   .status-key-value { color: #0d47a1; background: #e3f2fd; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+
+  /* Premium Streamlit Native Sidebar Navigation Styling */
+  [data-testid="stSidebarNav"] {
+    padding-top: 1rem;
+  }
+  [data-testid="stSidebarNav"] ul {
+    padding: 0 10px;
+  }
+  [data-testid="stSidebarNav"] ul li a {
+    border-radius: 8px !important;
+    margin: 4px 0 !important;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    background-color: transparent !important;
+    border: 1px solid transparent;
+  }
+  [data-testid="stSidebarNav"] ul li a:hover {
+    background-color: #f0f4ff !important;
+    border: 1px solid #c5cae9;
+    transform: translateX(4px);
+  }
+  [data-testid="stSidebarNav"] ul li a span {
+    font-weight: 500 !important;
+    color: #1a237e !important;
+    font-size: 14px;
+  }
+  /* Active page styling */
+  [data-testid="stSidebarNav"] ul li a[aria-current="page"] {
+    background: linear-gradient(135deg, #1a237e, #283593) !important;
+    box-shadow: 0 4px 12px rgba(26, 35, 126, 0.2) !important;
+    border: none;
+  }
+  [data-testid="stSidebarNav"] ul li a[aria-current="page"]:hover {
+    transform: none;
+  }
+  [data-testid="stSidebarNav"] ul li a[aria-current="page"] span {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+  }
+  [data-testid="stSidebarNav"] ul li div[data-testid="stSidebarNavSeparator"] {
+    opacity: 0.2;
+    margin: 15px 20px;
+  }
 </style>"""
 
 

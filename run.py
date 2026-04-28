@@ -145,7 +145,7 @@ def main():
     # Start Streamlit Dashboard
     if run_all or args.dashboard:
         print("▶ Starting Streamlit Dashboard (port 8501)...")
-        dashboard_path = os.path.join(BASE_DIR, "dashboard", "app.py")
+        dashboard_path = os.path.join(BASE_DIR, "dashboard", "Home.py")
         proc = run_streamlit(dashboard_path, 8501, "DASHBOARD")
         processes.append(("Dashboard", proc, 8501))
 

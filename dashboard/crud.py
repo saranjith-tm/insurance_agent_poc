@@ -75,3 +75,39 @@ def fetch_checklist_status(UNDERWRITING_URL):
             return resp.json()
     except Exception:
         return None
+
+
+def init_session_config():
+    """Initialize shared session state with defaults if not already present."""
+    from config import (
+        VLM_MODELS,
+        DEFAULT_OPENROUTER_KEY,
+        DEFAULT_OPENAI_KEY,
+        AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
+        AZURE_DOCUMENT_INTELLIGENCE_KEY,
+        AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID,
+    )
+
+    defaults = {
+        "automation_state": None,
+        "automation_thread": None,
+        "last_log_count": 0,
+        "cached_form_data": None,
+        "extracted_doc_data": None,
+        "extracted_doc_image": None,
+        "extracted_doc_pages": [],
+        "validation_report": None,
+        "rules_report": None,
+        # configuration (persisted across pages via session state)
+        "cfg_model_name": list(VLM_MODELS.keys())[0],
+        "cfg_api_key": DEFAULT_OPENROUTER_KEY,
+        "cfg_azure_endpoint": AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
+        "cfg_azure_key": AZURE_DOCUMENT_INTELLIGENCE_KEY,
+        "cfg_azure_model_id": AZURE_DOCUMENT_INTELLIGENCE_MODEL_ID,
+        "cfg_use_visual_mode": True,
+        "cfg_step_delay": 1.5,
+        "cfg_app_no": "OS121345678",
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v

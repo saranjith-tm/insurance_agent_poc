@@ -83,7 +83,7 @@ insurance_poc/
 │       └── google_client.py            # Gemini 1.5 Pro via google-generativeai
 │
 ├── dashboard/                          # Orchestration Interface (Streamlit)
-│   ├── app.py                          # Main Streamlit UI (config panel, run controls, live monitor)
+│   ├── Home.py                         # Main Streamlit UI (config panel, run controls, live monitor)
 │   ├── constants.py                    # Dashboard string constants and defaults
 │   ├── service.py                      # Dashboard business logic (start/stop automation)
 │   ├── crud.py                         # Dashboard DB helpers (fetch case status)

@@ -152,7 +152,7 @@ def run_step_extract_applicant_data(agent):
 
 # ---------------------------------------------------------------------------
 # Dashboard document extraction helpers
-# (used by dashboard/app.py — independent of the underwriting agent)
+# (used by dashboard/Home.py — independent of the underwriting agent)
 # ---------------------------------------------------------------------------
 
 def pdf_to_images(pdf_bytes: bytes, dpi: int = 200) -> list:
