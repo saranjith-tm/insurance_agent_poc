@@ -274,6 +274,7 @@ def extract_document_fields(
 
     merged_data = {}
     confidences = []
+    field_confidences = {}
 
     # 1. Process Key-Value Pairs (common in prebuilt-document model)
     if hasattr(result, "key_value_pairs") and result.key_value_pairs:
@@ -289,6 +290,7 @@ def extract_document_fields(
                 
                 if key not in merged_data or merged_data[key] in ("", None):
                     merged_data[key] = value
+                    field_confidences[key] = round(conf, 4)
 
     # 2. Process Fields from Documents (common in custom models)
     if hasattr(result, "documents") and result.documents:
@@ -306,9 +308,11 @@ def extract_document_fields(
                     
                     if key not in merged_data or merged_data[key] in ("", None):
                         merged_data[key] = value
+                        field_confidences[key] = round(conf, 4)
 
     avg_confidence = sum(confidences) / len(confidences) if confidences else 1.0
     merged_data["extraction_confidence"] = round(avg_confidence, 4)
+    merged_data["_field_confidences"] = field_confidences
 
     return merged_data, page_images, avg_confidence, 0, 0, f"azure-{azure_model_id}"
 

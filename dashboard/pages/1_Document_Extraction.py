@@ -134,6 +134,37 @@ st.markdown("### 🔬 Extraction Review")
 
 if st.session_state.get("extracted_doc_data") and st.session_state.get("extracted_doc_pages"):
     pages = st.session_state.extracted_doc_pages
+    data = st.session_state.extracted_doc_data
+    field_confidences = data.get("_field_confidences", {})
+    low_conf_fields = {k: v for k, v in field_confidences.items() if v < 0.75}
+
+    if len(low_conf_fields) >= 3:
+        st.warning(f"⚠️ {len(low_conf_fields)} fields have extraction confidence below 75%. Human review is recommended.")
+        if st.button("👁️ Human Review"):
+            st.session_state.show_human_review = not st.session_state.get("show_human_review", False)
+            
+        if st.session_state.get("show_human_review", False):
+            st.markdown("#### 🔍 Low Confidence Fields (Requires Human Review)")
+            html_low = (
+                "<table style='width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 15px;'>"
+                "<tr>"
+                "<th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Field</th>"
+                "<th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Extracted Value</th>"
+                "<th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Confidence</th>"
+                "</tr>"
+            )
+            for k, v in low_conf_fields.items():
+                val = data.get(k, "")
+                html_low += (
+                    f"<tr>"
+                    f"<td style='border-bottom:1px solid #eee;padding:4px'>{k}</td>"
+                    f"<td style='border-bottom:1px solid #eee;padding:4px'>{val}</td>"
+                    f"<td style='border-bottom:1px solid #eee;padding:4px;color:red'>{(v*100):.1f}%</td>"
+                    f"</tr>"
+                )
+            html_low += "</table>"
+            st.markdown(html_low, unsafe_allow_html=True)
+            st.divider()
 
     rev_col1, rev_col2 = st.columns([1, 1])
 
@@ -178,6 +209,7 @@ if st.session_state.get("extracted_doc_data") and st.session_state.get("extracte
                 "<th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Value</th>"
                 "<th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Status</th>"
                 "<th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Message</th>"
+                "<th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Confidence</th>"
                 "</tr>"
             )
             for c in vr["checks"]:
@@ -191,6 +223,10 @@ if st.session_state.get("extracted_doc_data") and st.session_state.get("extracte
                     if c["status"] == "pass"
                     else ("⚠️" if c["status"] == "warn" else "❌")
                 )
+                conf_val = f"{(c.get('confidence', 0)*100):.1f}%" if c.get('confidence') is not None else "—"
+                conf_color = "red" if c.get('confidence', 1.0) < 0.75 else ("orange" if c.get('confidence', 1.0) < 0.90 else "green")
+                conf_html = f"<span style='color:{conf_color}'>{conf_val}</span>" if c.get('confidence') is not None else "—"
+                
                 html_val += (
                     f"<tr>"
                     f"<td style='border-bottom:1px solid #eee;padding:4px'>{c['check']}</td>"
@@ -198,6 +234,7 @@ if st.session_state.get("extracted_doc_data") and st.session_state.get("extracte
                     f"<td style='border-bottom:1px solid #eee;padding:4px;color:{color}'>"
                     f"<b>{icon} {c['status'].upper()}</b></td>"
                     f"<td style='border-bottom:1px solid #eee;padding:4px'>{c['message']}</td>"
+                    f"<td style='border-bottom:1px solid #eee;padding:4px'>{conf_html}</td>"
                     f"</tr>"
                 )
             html_val += "</table><br/>"

@@ -49,17 +49,18 @@ def _age(dob: date) -> int:
     return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
-def _check(name: str, value, valid: bool, message: str) -> dict:
+def _check(name: str, value, valid: bool, message: str, confidence: float = None) -> dict:
     return {
         "check": name,
         "value": str(value) if value is not None else "—",
         "status": "pass" if valid else "fail",
         "message": message,
+        "confidence": confidence,
     }
 
 
 def _skip(name: str, reason: str) -> dict:
-    return {"check": name, "value": "—", "status": "warn", "message": reason}
+    return {"check": name, "value": "—", "status": "warn", "message": reason, "confidence": None}
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -77,6 +78,7 @@ def validate_fields(extracted_data: dict) -> dict:
         _parsed : typed values passed to the business rules agent
     """
     checks = []
+    fc = extracted_data.get("_field_confidences", {})
 
     # Aadhaar
     aadhaar_raw = extracted_data.get("aadhaar_no")
@@ -85,6 +87,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Aadhaar Number Format", aadhaar_raw, aadhaar_ok,
         "Valid 12-digit Aadhaar." if aadhaar_ok else f"Expected 12 digits, got: '{aadhaar_raw}'",
+        confidence=fc.get("aadhaar_no")
     ))
 
     # PAN
@@ -94,6 +97,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "PAN Card Format", pan_raw, pan_ok,
         "Valid PAN format." if pan_ok else f"Expected ABCDE1234F, got: '{pan_raw}'",
+        confidence=fc.get("pan_card_no")
     ))
 
     # Mobile
@@ -105,6 +109,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Mobile Number", mobile_raw, mobile_ok,
         "Valid 10-digit mobile." if mobile_ok else f"Expected 10-digit Indian number, got: '{mobile_raw}'",
+        confidence=fc.get("mobile_number")
     ))
 
     # Email
@@ -113,6 +118,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Email Address", email_raw, email_ok,
         "Valid email format." if email_ok else f"Invalid email: '{email_raw}'",
+        confidence=fc.get("email_address")
     ))
 
     # Date of Birth
@@ -121,6 +127,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Date of Birth Parseable", dob_raw, dob is not None,
         f"Parsed as {dob}." if dob else f"Cannot parse '{dob_raw}' as a date.",
+        confidence=fc.get("date_of_birth")
     ))
     age = None
     if dob:
@@ -129,6 +136,7 @@ def validate_fields(extracted_data: dict) -> dict:
         checks.append(_check(
             "Age at Entry (18–70)", f"{age} yrs", age_ok,
             f"Age {age} is within range." if age_ok else f"Age {age} is outside acceptable range 18–70.",
+            confidence=fc.get("date_of_birth")
         ))
 
     # Gender
@@ -137,6 +145,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Gender Valid", gender_raw, gender_ok,
         "Recognised gender value." if gender_ok else f"Unrecognised value: '{gender_raw}'",
+        confidence=fc.get("gender")
     ))
 
     # Pincode
@@ -146,6 +155,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Pincode Format", pin_raw, pin_ok,
         "Valid 6-digit pincode." if pin_ok else f"Expected 6-digit pincode, got: '{pin_raw}'",
+        confidence=fc.get("pincode")
     ))
 
     # Sum Assured
@@ -155,6 +165,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Sum Assured Numeric", sa_raw, sa_ok,
         f"Parsed as ₹{sa:,.0f}." if sa_ok else f"Cannot parse sum assured: '{sa_raw}'",
+        confidence=fc.get("sum_assured")
     ))
 
     # Height
@@ -164,6 +175,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Height (cm)", h_raw, h_ok,
         f"{h} cm is plausible." if h_ok else f"Height '{h_raw}' seems invalid.",
+        confidence=fc.get("height_cm")
     ))
 
     # Weight
@@ -173,6 +185,7 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Weight (kg)", w_raw, w_ok,
         f"{w} kg is plausible." if w_ok else f"Weight '{w_raw}' seems invalid.",
+        confidence=fc.get("weight_kg")
     ))
 
     # Loan Tenure
@@ -182,27 +195,8 @@ def validate_fields(extracted_data: dict) -> dict:
     checks.append(_check(
         "Loan Tenure (months)", tenure_raw, tenure_ok,
         f"Loan tenure: {tenure} months." if tenure_ok else f"Cannot parse loan tenure: '{tenure_raw}'",
+        confidence=fc.get("loan_tenure")
     ))
-
-    # Summary
-    pass_n = sum(1 for c in checks if c["status"] == "pass")
-    fail_n = sum(1 for c in checks if c["status"] == "fail")
-    warn_n = sum(1 for c in checks if c["status"] == "warn")
-    status = "fail" if fail_n > 0 else ("warn" if warn_n > 0 else "pass")
-
-    return {
-        "checks": checks,
-        "summary": {"pass": pass_n, "fail": fail_n, "warn": warn_n},
-        "status": status,
-        "_parsed": {
-            "dob": dob,
-            "age": age,
-            "sum_assured": sa,
-            "height_cm": h,
-            "weight_kg": w,
-            "loan_tenure_months": tenure,
-        },
-    }
 
     # Summary
     pass_n = sum(1 for c in checks if c["status"] == "pass")
