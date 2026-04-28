@@ -520,10 +520,19 @@ with tab6:
 
             if st.session_state.rules_report:
                 rr = st.session_state.rules_report
-                st.markdown(f"**3. Business Rules** (Pass: {rr['summary']['pass']} | Error: {rr['summary']['error']} | Warn: {rr['summary']['warn']})")
+                
+                # Rules to hide from the display (logic still runs)
+                HIDDEN_RULES = {"PPT Format (years / monthly)", "Nominee ≠ Applicant"}
+                visible_rules = [r for r in rr["rules"] if r["rule"] not in HIDDEN_RULES]
+                
+                v_pass = sum(1 for r in visible_rules if r["status"] == "pass")
+                v_error = sum(1 for r in visible_rules if r["status"] == "error")
+                v_warn = sum(1 for r in visible_rules if r["status"] == "warn")
+                
+                st.markdown(f"**3. Business Rules** (Pass: {v_pass} | Error: {v_error} | Warn: {v_warn})")
                 
                 html_rules = "<table style='width: 100%; border-collapse: collapse; font-size: 13px;'><tr><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Rule</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Status</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Message</th><th style='text-align:left; border-bottom: 1px solid #ddd; padding: 4px;'>Code</th></tr>"
-                for r in rr["rules"]:
+                for r in visible_rules:
                     color = "green" if r["status"] == "pass" else ("orange" if r["status"] == "warn" else "red")
                     icon = "✅" if r["status"] == "pass" else ("⚠️" if r["status"] == "warn" else "❌")
                     code_html = f"<code>{r['code']}</code>" if r['code'] else ""

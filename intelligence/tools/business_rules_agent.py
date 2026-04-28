@@ -150,7 +150,7 @@ def check_business_rules(extracted_data: dict, parsed_values: dict = None) -> di
     if h and w and h > 0:
         bmi = w / ((h / 100) ** 2)
 
-    # Check specific history fields from custom model
+    # Check specific history fields from custom model (flat fields)
     health_history_fields = [
         "chronic_disease_history",
         "recent_hospitalization_or_surgery",
@@ -161,12 +161,23 @@ def check_business_rules(extracted_data: dict, parsed_values: dict = None) -> di
     
     any_dgh_yes = False
         
-    # Check the specific custom history fields
+    # Check the specific custom history fields (if flat)
     for field_name in health_history_fields:
         val = extracted_data.get(field_name)
         if val and str(val).lower() in ("yes", "true", "t", "y"):
             any_dgh_yes = True
             break
+            
+    # Also check the array format 'health_questions' or 'health_questionnaire'
+    health_arr = extracted_data.get("health_questions") or extracted_data.get("health_questionnaire")
+    if isinstance(health_arr, list):
+        for item in health_arr:
+            if isinstance(item, dict):
+                # The custom model keys might be "Yes No" or "yes_no" or "yes"
+                yes_val = item.get("Yes No") or item.get("yes_no") or item.get("yes")
+                if str(yes_val).strip().lower() == "yes":
+                    any_dgh_yes = True
+                    break
 
     if bmi is not None:
         if bmi >= 30 and any_dgh_yes:

@@ -195,6 +195,24 @@ def merge_extracted_data(base: dict, update: dict) -> dict:
     return result
 
 
+def _extract_field_value(field):
+    """Recursively extract the value from an Azure DocumentField."""
+    if not field:
+        return ""
+        
+    field_type = getattr(field, "type", getattr(field, "value_type", None))
+    
+    if field_type == "array":
+        arr = getattr(field, "value_array", getattr(field, "value", []))
+        return [_extract_field_value(item) for item in (arr or [])]
+    elif field_type == "object":
+        obj = getattr(field, "value_object", getattr(field, "value", {}))
+        return {k: _extract_field_value(v) for k, v in (obj or {}).items()}
+    else:
+        val = field.content if hasattr(field, "content") else getattr(field, "value", None)
+        return val if val is not None else ""
+
+
 def extract_document_fields(
     file_bytes: bytes,
     filename: str,
@@ -281,9 +299,7 @@ def extract_document_fields(
                     key = name.strip().lower()
                     key = re.sub(r'[^a-z0-9]+', '_', key).strip('_')
                     
-                    value = field.content if hasattr(field, "content") else field.value
-                    if value is None:
-                        value = ""
+                    value = _extract_field_value(field)
                     
                     conf = field.confidence if hasattr(field, "confidence") else 0.95
                     confidences.append(conf)
