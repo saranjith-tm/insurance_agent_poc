@@ -57,92 +57,31 @@ selected_model_name = st.selectbox(
 st.session_state.cfg_model_name = selected_model_name
 model_config = VLM_MODELS[selected_model_name]
 
-st.divider()
 
-# ── API Keys ──────────────────────────────────────────────────────────────────
-st.markdown("### 🔑 API Keys")
-provider = model_config["provider"]
-if provider == "openrouter":
-    api_key = st.text_input(
-        "OpenRouter API Key",
-        value=st.session_state.cfg_api_key,
-        type="password",
-        key="_ak_openrouter",
-    )
-elif provider == "openai":
-    api_key = st.text_input(
-        "OpenAI API Key",
-        value=st.session_state.cfg_api_key,
-        type="password",
-        key="_ak_openai",
-    )
-elif provider == "google":
-    api_key = st.text_input(
-        "Google AI API Key",
-        value=st.session_state.cfg_api_key,
-        type="password",
-        key="_ak_google",
-    )
-else:
-    api_key = st.text_input(
-        "API Key",
-        value=st.session_state.cfg_api_key,
-        type="password",
-        key="_ak_other",
-    )
-st.session_state.cfg_api_key = api_key
 
-st.divider()
 
-# ── Azure Document Intelligence ───────────────────────────────────────────────
-st.markdown("### 📑 Azure Document Intelligence")
-az1, az2, az3 = st.columns(3)
+# ── Document Intelligence ───────────────────────────────────────────────────
+st.markdown("### 📄 Document Intelligence")
+
+az1, az2 = st.columns(2)
 with az1:
     azure_endpoint = st.text_input(
         "Azure Endpoint",
-        value=st.session_state.cfg_azure_endpoint,
+        value=st.session_state.get("cfg_azure_endpoint") or "https://mykroftinsurance-poc-doc-ai.cognitiveservices.azure.com/",
         key="_az_ep",
     )
     st.session_state.cfg_azure_endpoint = azure_endpoint
+
 with az2:
-    azure_key = st.text_input(
-        "Azure Key",
-        value=st.session_state.cfg_azure_key,
-        type="password",
-        key="_az_key",
-    )
-    st.session_state.cfg_azure_key = azure_key
-with az3:
     azure_model_id = st.text_input(
         "Model ID",
-        value=st.session_state.cfg_azure_model_id,
+        value=st.session_state.get("cfg_azure_model_id") or "mykroft-v3",
         help="Leave as 'prebuilt-document' or enter your custom model ID.",
         key="_az_mid",
     )
     st.session_state.cfg_azure_model_id = azure_model_id
 
-st.divider()
 
-# ── Automation Settings ───────────────────────────────────────────────────────
-st.markdown("### 🛠️ Automation Settings")
-as1, as2 = st.columns(2)
-with as1:
-    use_visual_mode = st.toggle(
-        "🤖 VLM Visual Mode",
-        value=st.session_state.cfg_use_visual_mode,
-        key="_vis_mode",
-    )
-    st.session_state.cfg_use_visual_mode = use_visual_mode
-with as2:
-    step_delay = st.slider(
-        "Step Delay (seconds)",
-        min_value=0.5,
-        max_value=5.0,
-        value=st.session_state.cfg_step_delay,
-        step=0.5,
-        key="_step_delay",
-    )
-    st.session_state.cfg_step_delay = step_delay
 
 st.divider()
 
