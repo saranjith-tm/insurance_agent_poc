@@ -26,6 +26,19 @@ import webbrowser
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def get_python_executable():
+    """Find the best python executable to use (prefers .venv)."""
+    # On Windows, it's .venv/Scripts/python.exe, on Unix it's .venv/bin/python
+    if os.name == "nt":
+        venv_python = os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe")
+    else:
+        venv_python = os.path.join(BASE_DIR, ".venv", "bin", "python")
+
+    if os.path.exists(venv_python):
+        return venv_python
+    return sys.executable
+
+
 def run_flask_app(app_path: str, port: int, name: str) -> subprocess.Popen:
     """Start a Flask app as a subprocess."""
     env = os.environ.copy()
@@ -34,7 +47,7 @@ def run_flask_app(app_path: str, port: int, name: str) -> subprocess.Popen:
     env["PYTHONUNBUFFERED"] = "1"
 
     proc = subprocess.Popen(
-        [sys.executable, app_path],
+        [get_python_executable(), app_path],
         env=env,
         cwd=BASE_DIR,
         stdout=subprocess.PIPE,
@@ -60,7 +73,7 @@ def run_streamlit(dashboard_path: str, port: int, name: str) -> subprocess.Popen
 
     proc = subprocess.Popen(
         [
-            sys.executable,
+            get_python_executable(),
             "-m",
             "streamlit",
             "run",
