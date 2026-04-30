@@ -213,6 +213,95 @@ def _extract_field_value(field):
         return val if val is not None else ""
 
 
+def _fallback_vlm_ocr(vlm_client, page_images, result_pages, region, key_name, azure_val, azure_conf):
+    debug_info = {
+        "field": key_name,
+        "azure_val": azure_val,
+        "azure_conf": azure_conf,
+        "crop_image": None,
+        "vlm_val": None,
+        "vlm_conf": None,
+        "selected": "azure"
+    }
+    if not vlm_client or not region or not hasattr(region, "page_number") or not result_pages:
+        return azure_val, azure_conf, None, debug_info
+    try:
+        from PIL import Image, ImageEnhance
+        import io
+        
+        page_num = region.page_number
+        if page_num > len(page_images):
+            return azure_val, azure_conf, None, debug_info
+            
+        page_info = next((p for p in result_pages if p.page_number == page_num), None)
+        if not page_info:
+            return azure_val, azure_conf, None, debug_info
+            
+        page_img_bytes = page_images[page_num - 1]
+        pil_img = Image.open(io.BytesIO(page_img_bytes))
+        img_w, img_h = pil_img.size
+        
+        polygon = region.polygon
+        p_w = page_info.width
+        p_h = page_info.height
+        
+        xs = [polygon[i] for i in range(0, len(polygon), 2)]
+        ys = [polygon[i] for i in range(1, len(polygon), 2)]
+        
+        rel_xmin = min(xs) / p_w
+        rel_xmax = max(xs) / p_w
+        rel_ymin = min(ys) / p_h
+        rel_ymax = max(ys) / p_h
+        
+        # Add padding (15% to ensure context)
+        pad_x = (rel_xmax - rel_xmin) * 0.15
+        pad_y = (rel_ymax - rel_ymin) * 0.15
+        
+        left = max(0, int((rel_xmin - pad_x) * img_w))
+        right = min(img_w, int((rel_xmax + pad_x) * img_w))
+        top = max(0, int((rel_ymin - pad_y) * img_h))
+        bottom = min(img_h, int((rel_ymax + pad_y) * img_h))
+        
+        cropped = pil_img.crop((left, top, right, bottom))
+        
+        # Enhance
+        cropped = ImageEnhance.Sharpness(cropped).enhance(2.0)
+        cropped = ImageEnhance.Contrast(cropped).enhance(1.5)
+        cropped = ImageEnhance.Brightness(cropped).enhance(1.1)
+        
+        out_io = io.BytesIO()
+        cropped.save(out_io, format="PNG")
+        crop_bytes = out_io.getvalue()
+        debug_info["crop_image"] = crop_bytes
+        
+        prompt = (
+            f"Please extract the specific text value for the field '{key_name}' from this cropped image region. "
+            "Return a JSON object with exactly two keys: 'value' (the extracted text) and 'confidence' (a number between 0.0 and 1.0 indicating your certainty)."
+        )
+        
+        vlm_resp, usage = vlm_client.analyze_document(crop_bytes, prompt)
+        
+        if "value" in vlm_resp and "confidence" in vlm_resp:
+            vlm_val = str(vlm_resp["value"])
+            try:
+                vlm_conf = float(vlm_resp["confidence"])
+            except ValueError:
+                vlm_conf = 0.85
+                
+            debug_info["vlm_val"] = vlm_val
+            debug_info["vlm_conf"] = vlm_conf
+            
+            print(f"VLM Fallback for '{key_name}': Azure=({azure_val}, {azure_conf:.2f}), VLM=({vlm_val}, {vlm_conf:.2f})")
+            
+            if vlm_conf > azure_conf:
+                debug_info["selected"] = "vlm"
+                return vlm_val, vlm_conf, usage, debug_info
+        return azure_val, azure_conf, usage, debug_info
+    except Exception as e:
+        print(f"VLM Fallback Error for '{key_name}': {e}")
+        return azure_val, azure_conf, None, debug_info
+
+
 def extract_document_fields(
     file_bytes: bytes,
     filename: str,
@@ -220,6 +309,7 @@ def extract_document_fields(
     azure_key: str,
     azure_model_id: str = "prebuilt-document",
     progress_callback=None,
+    vlm_client=None,
 ):
     """Extract all fields from an uploaded document using Azure Document Intelligence.
 
@@ -237,6 +327,8 @@ def extract_document_fields(
         Custom model ID, defaults to 'prebuilt-document'.
     progress_callback : callable(current_page: int, total_pages: int), optional
         Called to update a UI progress indicator.
+    vlm_client : BaseVLMClient, optional
+        VLM client to use for fallback extraction.
 
     Returns
     -------
@@ -247,6 +339,7 @@ def extract_document_fields(
         total_input_tokens : int    — 0 (not applicable for Azure)
         total_output_tokens: int    — 0 (not applicable for Azure)
         model_id           : str    — 'azure-prebuilt-document'
+        fallback_logs      : list   — debug logs for VLM fallback
     """
     from azure.core.credentials import AzureKeyCredential
     from azure.ai.documentintelligence import DocumentIntelligenceClient
@@ -275,6 +368,9 @@ def extract_document_fields(
     merged_data = {}
     confidences = []
     field_confidences = {}
+    total_input_tokens = 0
+    total_output_tokens = 0
+    fallback_logs = []
 
     # 1. Process Key-Value Pairs (common in prebuilt-document model)
     if hasattr(result, "key_value_pairs") and result.key_value_pairs:
@@ -286,6 +382,18 @@ def extract_document_fields(
                 
                 value = kvp.value.content.strip()
                 conf = kvp.confidence if hasattr(kvp, "confidence") else 0.95
+                
+                if conf < 0.80 and vlm_client:
+                    region = None
+                    if hasattr(kvp.value, "bounding_regions") and kvp.value.bounding_regions:
+                        region = kvp.value.bounding_regions[0]
+                    value, conf, usage, debug_info = _fallback_vlm_ocr(vlm_client, page_images, getattr(result, "pages", []), region, key, value, conf)
+                    if usage:
+                        total_input_tokens += usage.input_tokens
+                        total_output_tokens += usage.output_tokens
+                    if debug_info and debug_info.get("vlm_val") is not None:
+                        fallback_logs.append(debug_info)
+
                 confidences.append(conf)
                 
                 if key not in merged_data or merged_data[key] in ("", None):
@@ -304,6 +412,18 @@ def extract_document_fields(
                     value = _extract_field_value(field)
                     
                     conf = field.confidence if hasattr(field, "confidence") else 0.95
+                    
+                    if conf < 0.80 and vlm_client:
+                        region = None
+                        if hasattr(field, "bounding_regions") and field.bounding_regions:
+                            region = field.bounding_regions[0]
+                        value, conf, usage, debug_info = _fallback_vlm_ocr(vlm_client, page_images, getattr(result, "pages", []), region, key, value, conf)
+                        if usage:
+                            total_input_tokens += usage.input_tokens
+                            total_output_tokens += usage.output_tokens
+                        if debug_info and debug_info.get("vlm_val") is not None:
+                            fallback_logs.append(debug_info)
+
                     confidences.append(conf)
                     
                     if key not in merged_data or merged_data[key] in ("", None):
@@ -314,5 +434,5 @@ def extract_document_fields(
     merged_data["extraction_confidence"] = round(avg_confidence, 4)
     merged_data["_field_confidences"] = field_confidences
 
-    return merged_data, page_images, avg_confidence, 0, 0, f"azure-{azure_model_id}"
+    return merged_data, page_images, avg_confidence, total_input_tokens, total_output_tokens, f"azure-{azure_model_id}", fallback_logs
 

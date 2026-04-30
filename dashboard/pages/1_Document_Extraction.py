@@ -68,6 +68,9 @@ if extract_clicked:
     else:
         with st.spinner("Extracting data via Azure Document Intelligence…"):
             try:
+                import intelligence.tools.extraction
+                import importlib
+                importlib.reload(intelligence.tools.extraction)
                 from intelligence.tools.extraction import extract_document_fields
                 from dashboard.crud import get_state
 
@@ -81,6 +84,21 @@ if extract_clicked:
                         text=f"Processing page {current} of {total}…",
                     )
 
+                from intelligence.helpers import get_vlm_client
+                from config import VLM_MODELS
+                
+                model_config = VLM_MODELS.get(
+                    st.session_state.get("cfg_model_name", "Qwen VL Max"),
+                    list(VLM_MODELS.values())[0] if VLM_MODELS else {"provider": "openrouter", "model_id": "qwen/qwen-vl-max:free"}
+                )
+                
+                vlm_client = None
+                if st.session_state.get("cfg_use_visual_mode", True) and st.session_state.get("cfg_api_key"):
+                    try:
+                        vlm_client = get_vlm_client(model_config, st.session_state.cfg_api_key)
+                    except Exception as e:
+                        st.warning(f"Could not initialize VLM for OCR fallback: {e}")
+
                 (
                     merged_data,
                     page_images,
@@ -88,6 +106,7 @@ if extract_clicked:
                     total_input,
                     total_output,
                     model_id,
+                    fallback_logs,
                 ) = extract_document_fields(
                     file_bytes=uploaded_file.getvalue(),
                     filename=uploaded_file.name,
@@ -95,6 +114,7 @@ if extract_clicked:
                     azure_key=azure_key,
                     azure_model_id=azure_model_id,
                     progress_callback=_on_progress,
+                    vlm_client=vlm_client,
                 )
                 progress_bar.progress(1.0, text="Done!")
 
@@ -116,6 +136,7 @@ if extract_clicked:
                 st.session_state.extracted_doc_data = merged_data
                 st.session_state.extracted_doc_pages = page_images
                 st.session_state.extracted_doc_image = page_images[0]
+                st.session_state.fallback_logs = fallback_logs
 
                 n = total_pages_hint[0]
                 label = (
@@ -286,6 +307,51 @@ if st.session_state.get("extracted_doc_data") and st.session_state.get("extracte
                 )
             html_rules += "</table>"
             st.markdown(html_rules, unsafe_allow_html=True)
+            
+        # ── VLM Fallback Debug ──────────────────────────────────────────────────
+        if st.session_state.get("fallback_logs"):
+            st.markdown("### 🤖 VLM OCR Fallback Analysis")
+            st.markdown("The following fields had low confidence from Azure (< 0.80) and triggered the VLM OCR fallback layer.")
+            
+            for log in st.session_state.fallback_logs:
+                with st.container():
+                    fcol1, fcol2 = st.columns([1, 2])
+                    with fcol1:
+                        if log.get("crop_image"):
+                            st.image(log["crop_image"], caption=f"Cropped Region: {log['field']}", use_container_width=True)
+                        else:
+                            st.warning("No image region could be cropped.")
+                    with fcol2:
+                        st.markdown(f"**Field:** `{log['field']}`")
+                        
+                        azure_color = "red" if log["selected"] == "vlm" else "green"
+                        vlm_color = "green" if log["selected"] == "vlm" else "orange"
+                        
+                        html_cmp = f"""
+                        <table style='width: 100%; border-collapse: collapse; font-size: 14px;'>
+                            <tr>
+                                <th style='text-align:left; border-bottom: 1px solid #ddd; padding: 6px;'>Source</th>
+                                <th style='text-align:left; border-bottom: 1px solid #ddd; padding: 6px;'>Extracted Value</th>
+                                <th style='text-align:left; border-bottom: 1px solid #ddd; padding: 6px;'>Confidence</th>
+                            </tr>
+                            <tr>
+                                <td style='border-bottom:1px solid #eee;padding:6px'>Azure Document Intelligence</td>
+                                <td style='border-bottom:1px solid #eee;padding:6px'>'{log['azure_val']}'</td>
+                                <td style='border-bottom:1px solid #eee;padding:6px;color:{azure_color}'>{(log['azure_conf']*100):.1f}%</td>
+                            </tr>
+                            <tr>
+                                <td style='border-bottom:1px solid #eee;padding:6px'>VLM Fallback</td>
+                                <td style='border-bottom:1px solid #eee;padding:6px'>'{log['vlm_val']}'</td>
+                                <td style='border-bottom:1px solid #eee;padding:6px;color:{vlm_color}'>{(log['vlm_conf']*100):.1f}%</td>
+                            </tr>
+                        </table>
+                        <br/>
+                        """
+                        st.markdown(html_cmp, unsafe_allow_html=True)
+                        sel_val = log['vlm_val'] if log['selected'] == 'vlm' else log['azure_val']
+                        st.info(f"**Selected Value:** `{sel_val}` (Source: {log['selected'].upper()})")
+                    st.divider()
+
 else:
     st.info("📂 Upload a document above and click **Extract Fields** to see results here.")
 
